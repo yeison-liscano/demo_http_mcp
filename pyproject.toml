@@ -1,0 +1,51 @@
+[project]
+name = "test-http-mcp"
+authors = [{ name = "Yeison Liscano", email = "yliscanoc@gmail.com" }]
+maintainers = [{ name = "Yeison Liscano", email = "yliscanoc@gmail.com" }]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+keywords = ["mcp", "llm", "automation", "http"]
+description = "This is a HTTP implementation of the MCP protocol"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.13,<3.14"
+version = "0.0.1"
+
+dependencies = ["pydantic==2.10.5", "uvicorn==0.35.0", "starlette==0.47.2", "http-mcp==0.0.1"]
+
+[dependency-groups]
+dev = [
+    "httpx==0.28.1",
+    "mdformat==0.7.22",
+    "mypy==1.9.0",
+    "pytest==8.4.1",
+    "ruff==0.9.10",
+    "pytest-cov==6.2.1",
+    "pytest-asyncio==1.1.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
+[project.scripts]
+run-app = "app.main:run_http"
+run-stdio = "app.main:run_stdio"
+
+[project.urls]
+Homepage = "https://github.com/yeison-liscano/test-http-mcp"
+Issues = "https://github.com/yeison-liscano/test-http-mcp/issues"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[[tool.uv.index]]
+name = "testpypi"
+url = "https://test.pypi.org/simple/"
+publish-url = "https://test.pypi.org/legacy/"
+explicit = true
+
+[tool.uv.sources]
+microsoft-python-type-stubs = { git = "https://github.com/microsoft/python-type-stubs.git" }
