@@ -1,6 +1,8 @@
 ## test-http-mcp
 
-Demo Model Context Protocol (MCP) server implemented in Python using the `http-mcp` package. It can run over HTTP (Starlette/Uvicorn) or over stdio, exposing example Tools and Prompts to any MCP-capable client.
+Demo Model Context Protocol (MCP) server implemented in Python using the
+`http-mcp` package. It can run over HTTP (Starlette/Uvicorn) or over stdio,
+exposing example Tools and Prompts to any MCP-capable client.
 
 ### Requirements
 
@@ -32,19 +34,7 @@ uv run run-app
 # → http://localhost:8000/mcp
 ```
 
-### Run (stdio mode)
-
-Runs the MCP server over stdio. You can optionally pass an authorization token that will be forwarded to tools via the request headers.
-
-```bash
-AUTHORIZATION_TOKEN="Bearer TEST_TOKEN" uv run run-stdio
-```
-
-### Use with Cursor or other MCP clients
-
-Example `.cursor/mcp.json` entry to connect via stdio:
-
-Note this assumes that the server is running on `http://localhost:8000/mcp/` and that the authorization token is `TEST_TOKEN`.
+Example `.cursor/mcp.json`:
 
 ```json
 {
@@ -53,6 +43,22 @@ Note this assumes that the server is running on `http://localhost:8000/mcp/` and
       "type": "http",
       "url": "http://localhost:8000/mcp/",
       "headers": {
+        "Authorization": "Bearer $TEST_TOKEN"
+      }
+    }
+  }
+}
+```
+
+Usage with `Gemini`:
+
+```json
+{
+  "mcpServers": {
+    "test": {
+      "httpUrl": "http://localhost:8000/mcp/",
+      "timeout": 5000,
+      "headers": {
         "Authorization": "Bearer TEST_TOKEN"
       }
     }
@@ -60,7 +66,11 @@ Note this assumes that the server is running on `http://localhost:8000/mcp/` and
 }
 ```
 
-You can also use the studio transport to connect via stdio:
+### Run (stdio mode)
+
+### Use with Cursor or other MCP clients
+
+Example `.cursor/mcp.json` entry to connect via stdio:
 
 ```json
 {
@@ -79,10 +89,12 @@ You can also use the studio transport to connect via stdio:
 - Tools (see `app/tools.py`):
   - `get_weather(location: str, unit: str = "celsius") -> { weather: str }`
   - `get_time() -> { time: str }`
-  - `tool_that_access_request(username: str) -> { message: str }` (reads `Authorization` from the incoming request headers)
+  - `tool_that_access_request(username: str) -> { message: str }` (reads
+    `Authorization` from the incoming request headers)
   - `get_called_tools() -> { called_tools: string[] }`
 - Prompts (see `app/prompts.py`):
-  - `get_advice(topic: str, include_actionable_steps: bool = false)` → returns a single user message template
+  - `get_advice(topic: str, include_actionable_steps: bool = false)` → returns a
+    single user message template
 
 ### Project scripts
 
@@ -104,8 +116,11 @@ uv run mdformat .             # format markdown
 
 ### Implementation notes
 
-- The Starlette app is defined in `app/main.py` and mounts `http_mcp.server.MCPServer` at `/mcp`.
-- Tool inputs/outputs are validated with Pydantic v2 models; async tool functions receive a typed `ToolArguments` with `inputs`, `context`, and (in HTTP mode) `request`.
+- The Starlette app is defined in `app/main.py` and mounts
+  `http_mcp.server.MCPServer` at `/mcp`.
+- Tool inputs/outputs are validated with Pydantic v2 models; async tool
+  functions receive a typed `ToolArguments` with `inputs`, `context`, and (in
+  HTTP mode) `request`.
 - A simple `Context` keeps track of called tool names during a session.
 
 ### License
