@@ -4,6 +4,10 @@ Demo Model Context Protocol (MCP) server implemented in Python using the
 `http-mcp` package. It can run over HTTP (Starlette/Uvicorn) or over stdio,
 exposing example Tools and Prompts to any MCP-capable client.
 
+<a href="https://glama.ai/mcp/servers/@yeison-liscano/demo_http_mcp">
+  <img width="380" height="200" src="https://glama.ai/mcp/servers/@yeison-liscano/demo_http_mcp/badge" alt="Demo HTTP Server MCP server" />
+</a>
+
 ### Requirements
 
 - Python 3.13
