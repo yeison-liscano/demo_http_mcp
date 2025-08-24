@@ -2,20 +2,8 @@ import asyncio
 import os
 
 import uvicorn
-from starlette.applications import Starlette
 
-from app.prompts import PROMPTS
-from app.tools import TOOLS, Context
-from http_mcp.server import MCPServer
-
-app = Starlette()
-context = Context(called_tools=[])
-mcp_server = MCPServer(tools=TOOLS, prompts=PROMPTS, name="test", version="1.0.0", context=context)
-
-app.mount(
-    "/mcp",
-    mcp_server.app,
-)
+from app.app import app, mcp_server
 
 
 def run_http() -> None:
@@ -24,6 +12,6 @@ def run_http() -> None:
 
 def run_stdio() -> None:
     request_headers = {
-        "Authorization": os.getenv("AUTHORIZATION_TOKEN", ""),
+        "Authorization": os.getenv("NVD_API_KEY", ""),
     }
     asyncio.run(mcp_server.serve_stdio(request_headers), debug=True)

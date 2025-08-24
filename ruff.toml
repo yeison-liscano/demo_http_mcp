@@ -1,0 +1,30 @@
+cache-dir = ".ruff_cache"
+line-length = 100
+indent-width = 4
+target-version = "py313"
+include = ["app/**/*.py", "tests/**/*.py"]
+
+[lint]
+select = ["ALL"]
+ignore = [
+    "D100",
+    "D103",
+    "D101",
+    "D102",
+    "D104",
+    "D107",
+    "EM101",
+]
+fixable = ["ALL"]
+unfixable = []
+dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+
+[lint.per-file-ignores]
+"tests/**/*.py" = ["S101"]
+
+
+[format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "lf"

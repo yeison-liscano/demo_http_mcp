@@ -5,10 +5,7 @@
             "args": [
                 "run",
                 "run-stdio"
-            ],
-            "env": {
-                "AUTHORIZATION_TOKEN": "Bearer TEST_TOKEN"
-            }
+            ]
         }
     }
 }
