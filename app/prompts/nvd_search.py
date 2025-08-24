@@ -47,14 +47,14 @@ class NVDSearchInput(BaseModel):
         return version
 
 
-def sync_nvd_search(args: Arguments[NVDSearchInput]) -> tuple[PromptMessage, ...]: #type: ignore[type-arg]
+def sync_nvd_search(args: Arguments[NVDSearchInput]) -> tuple[PromptMessage, ...]:
     """Search for vulnerabilities in a dependency model controlled version."""
     message = f"Search for vulnerabilities in {args.inputs.dependency_name} "
     f"{args.inputs.dependency_version}"
     return (PromptMessage(role="user", content=TextContent(text=message)),)
 
 
-async def async_nvd_search(args: Arguments[NVDSearchInput]) -> tuple[PromptMessage, ...]: #type: ignore[type-arg]
+async def async_nvd_search(args: Arguments[NVDSearchInput]) -> tuple[PromptMessage, ...]:
     """Search for vulnerabilities in a dependency fast version."""
     cpe_results = search_cpe(
         Arguments(

@@ -21,7 +21,7 @@ def get_key(request: Request) -> str | None:
     return key
 
 
-def search_cpe(arg: Arguments[SearchCPEInput]) -> SearchCPEOutput: #type: ignore[type-arg]
+def search_cpe(arg: Arguments[SearchCPEInput]) -> SearchCPEOutput:
     """Search Common Platform Enumerations (CPE) for a given product and version."""
     results = tuple(
         CPE.model_validate(
@@ -36,7 +36,7 @@ def search_cpe(arg: Arguments[SearchCPEInput]) -> SearchCPEOutput: #type: ignore
     return SearchCPEOutput(cpes=results)
 
 
-async def search_cve(arg: Arguments[SearchCVEInput]) -> SearchCVEOutput: #type: ignore[type-arg]
+async def search_cve(arg: Arguments[SearchCVEInput]) -> SearchCVEOutput:
     """Search Common Vulnerabilities and Exposures (CVE) for a given CPE."""
     results = await asyncio.to_thread(
         nvdlib.searchCVE,
