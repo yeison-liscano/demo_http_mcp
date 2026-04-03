@@ -1,8 +1,8 @@
 import Markdown from "react-markdown";
-import type { ChatMessage } from "../types";
+import type { TextEvent } from "../types";
 
 interface MessageBubbleProps {
-  message: ChatMessage;
+  message: TextEvent;
 }
 
 export default function MessageBubble({ message }: MessageBubbleProps) {
@@ -10,9 +10,7 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
 
   return (
     <div className={`message ${isUser ? "message--user" : "message--model"}`}>
-      <div className="message__label">
-        {isUser ? "You" : "AI"}
-      </div>
+      <div className="message__label">{isUser ? "You" : "AI"}</div>
       <div className="message__content">
         <Markdown>{message.content}</Markdown>
       </div>

@@ -1,18 +1,17 @@
 import { useCallback, useEffect, useState } from "react";
 import { fetchChatHistory, sendChatMessage } from "../api";
-import type { ChatMessage } from "../types";
+import type { StreamEvent } from "../types";
 import ChatInput from "./ChatInput";
 import MessageList from "./MessageList";
 
 export default function ChatApp() {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [events, setEvents] = useState<StreamEvent[]>([]);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Load chat history on mount
   useEffect(() => {
     fetchChatHistory()
-      .then(setMessages)
+      .then((history) => setEvents(history))
       .catch((err) => {
         console.error("Failed to load chat history:", err);
         setError("Failed to load chat history.");
@@ -24,26 +23,20 @@ export default function ChatApp() {
     setError(null);
 
     try {
-      await sendChatMessage(prompt, (streamedMessages) => {
-        // Replace messages from the current response stream
-        // We keep existing history and append the new streamed messages
-        setMessages((prev) => {
-          // Find where the new messages start (by matching the user prompt timestamp)
-          // The first streamed message is always the user prompt
-          const firstStreamedTimestamp = streamedMessages[0]?.timestamp;
-          if (!firstStreamedTimestamp) return prev;
+      await sendChatMessage(prompt, (streamedEvents) => {
+        setEvents((prev) => {
+          const firstStreamed = streamedEvents[0];
+          if (!firstStreamed || firstStreamed.type !== "text") return prev;
 
           const cutoff = prev.findIndex(
-            (m) => m.timestamp === firstStreamedTimestamp,
+            (e) =>
+              e.type === "text" && e.timestamp === firstStreamed.timestamp,
           );
 
           if (cutoff >= 0) {
-            // Replace from the cutoff point with streamed data
-            return [...prev.slice(0, cutoff), ...streamedMessages];
+            return [...prev.slice(0, cutoff), ...streamedEvents];
           }
-
-          // New messages, append to existing
-          return [...prev, ...streamedMessages];
+          return [...prev, ...streamedEvents];
         });
       });
     } catch (err) {
@@ -61,7 +54,7 @@ export default function ChatApp() {
         <p>Ask me about vulnerabilities in any dependency</p>
       </header>
 
-      <MessageList messages={messages} />
+      <MessageList events={events} />
 
       {error && <div className="chat-app__error">{error}</div>}
 
