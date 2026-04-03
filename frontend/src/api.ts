@@ -1,20 +1,8 @@
-import type { ChatMessage } from "./types";
+import type { TextEvent, StreamEvent } from "./types";
 
 const API_BASE = "/api";
 
-/** Shape of JSON lines from the streaming POST /chat/ endpoint. */
-interface StreamedChunk {
-  role: "user" | "model";
-  content: string;
-  timestamp: string;
-  more_body?: boolean;
-}
-
-/**
- * Fetch existing chat history from the backend.
- * Returns parsed ChatMessage[] from newline-delimited JSON.
- */
-export async function fetchChatHistory(): Promise<ChatMessage[]> {
+export async function fetchChatHistory(): Promise<TextEvent[]> {
   const response = await fetch(`${API_BASE}/chat/`);
   if (!response.ok) {
     throw new Error(`Failed to fetch chat history: ${response.status}`);
@@ -23,17 +11,12 @@ export async function fetchChatHistory(): Promise<ChatMessage[]> {
   return text
     .split("\n")
     .filter((line) => line.trim().length > 0)
-    .map((line) => JSON.parse(line) as ChatMessage);
+    .map((line) => JSON.parse(line) as TextEvent);
 }
 
-/**
- * Send a chat prompt and stream back the response.
- * The backend streams text deltas — each line contains only the new fragment.
- * We accumulate model deltas into a single message before calling onChunk.
- */
 export async function sendChatMessage(
   prompt: string,
-  onChunk: (messages: ChatMessage[]) => void,
+  onChunk: (events: StreamEvent[]) => void,
 ): Promise<void> {
   const body = new FormData();
   body.append("prompt", prompt);
@@ -54,9 +37,10 @@ export async function sendChatMessage(
 
   const decoder = new TextDecoder();
   let buffer = "";
-  let userMessage: ChatMessage | null = null;
+  let userMessage: TextEvent | null = null;
   let modelContent = "";
   let modelTimestamp = "";
+  const toolEvents: StreamEvent[] = [];
 
   while (true) {
     const { done, value } = await reader.read();
@@ -64,40 +48,42 @@ export async function sendChatMessage(
 
     buffer += decoder.decode(value, { stream: true });
 
-    // Process all complete lines in the buffer
     const lines = buffer.split("\n");
-    // Last element may be an incomplete line — keep it in the buffer
     buffer = lines.pop() ?? "";
 
     for (const line of lines) {
       if (line.trim().length === 0) continue;
-      const chunk = JSON.parse(line) as StreamedChunk;
+      const chunk = JSON.parse(line) as StreamEvent;
 
-      if (chunk.role === "user") {
-        userMessage = {
-          role: "user",
-          timestamp: chunk.timestamp,
-          content: chunk.content,
-        };
-      } else {
-        // Model deltas: accumulate content
-        if (!modelTimestamp) modelTimestamp = chunk.timestamp;
-        modelContent += chunk.content;
+      switch (chunk.type) {
+        case "text":
+          if (chunk.role === "user") {
+            userMessage = chunk;
+          } else {
+            if (!modelTimestamp) modelTimestamp = chunk.timestamp;
+            modelContent += chunk.content;
+          }
+          break;
+        case "tool_call":
+        case "tool_result":
+          toolEvents.push(chunk);
+          break;
       }
     }
 
-    // Build current message list and notify
-    const messages: ChatMessage[] = [];
-    if (userMessage) messages.push(userMessage);
+    // Build ordered event list
+    const events: StreamEvent[] = [];
+    if (userMessage) events.push(userMessage);
+    // Tool events go before the final model text
+    events.push(...toolEvents);
     if (modelContent) {
-      messages.push({
+      events.push({
+        type: "text",
         role: "model",
         timestamp: modelTimestamp,
         content: modelContent,
       });
     }
-    if (messages.length > 0) {
-      onChunk(messages);
-    }
+    onChunk(events);
   }
 }
