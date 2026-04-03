@@ -40,6 +40,8 @@ export async function sendChatMessage(
   let userMessage: TextEvent | null = null;
   let modelContent = "";
   let modelTimestamp = "";
+  let thinkingContent = "";
+  let thinkingTimestamp = "";
   const toolEvents: StreamEvent[] = [];
 
   while (true) {
@@ -64,6 +66,10 @@ export async function sendChatMessage(
             modelContent += chunk.content;
           }
           break;
+        case "thinking":
+          if (!thinkingTimestamp) thinkingTimestamp = chunk.timestamp;
+          thinkingContent += chunk.content;
+          break;
         case "tool_call":
         case "tool_result":
           toolEvents.push(chunk);
@@ -74,7 +80,13 @@ export async function sendChatMessage(
     // Build ordered event list
     const events: StreamEvent[] = [];
     if (userMessage) events.push(userMessage);
-    // Tool events go before the final model text
+    if (thinkingContent) {
+      events.push({
+        type: "thinking",
+        timestamp: thinkingTimestamp,
+        content: thinkingContent,
+      });
+    }
     events.push(...toolEvents);
     if (modelContent) {
       events.push({

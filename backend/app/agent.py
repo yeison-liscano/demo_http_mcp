@@ -19,6 +19,7 @@ from pydantic_ai.messages import (
     PartStartEvent,
     TextPart,
     TextPartDelta,
+    ThinkingPart,
     ThinkingPartDelta,
     ToolReturnPart,
 )
@@ -60,30 +61,40 @@ class ToolResultEvent(BaseModel):
     timestamp: str = Field(default_factory=lambda: datetime.now(UTC).isoformat())
 
 
-StreamEvent = TextEvent | ToolCallEvent | ToolResultEvent
+class ThinkingEvent(BaseModel):
+    """Emitted for model thinking/reasoning chunks."""
+
+    type: Literal["thinking"] = "thinking"
+    content: str
+    timestamp: str = Field(default_factory=lambda: datetime.now(UTC).isoformat())
+
+
+StreamEvent = TextEvent | ToolCallEvent | ToolResultEvent | ThinkingEvent
 
 
 def _process_model_response_stream_event(
     model_response_stream_event: ModelResponseStreamEvent,
-) -> TextEvent | None:
-    if isinstance(model_response_stream_event, PartStartEvent) and isinstance(
-        model_response_stream_event.part,
-        TextPart,
-    ):
-        return TextEvent(
-            content=model_response_stream_event.part.content,
-            more_body=True,
-            role="model",
-        )
-    if isinstance(model_response_stream_event, PartDeltaEvent) and isinstance(
-        model_response_stream_event.delta,
-        TextPartDelta | ThinkingPartDelta,
-    ):
-        return TextEvent(
-            content=model_response_stream_event.delta.content_delta or "",
-            role="model",
-            more_body=True,
-        )
+) -> TextEvent | ThinkingEvent | None:
+    if isinstance(model_response_stream_event, PartStartEvent):
+        if isinstance(model_response_stream_event.part, TextPart):
+            return TextEvent(
+                content=model_response_stream_event.part.content,
+                more_body=True,
+                role="model",
+            )
+        if isinstance(model_response_stream_event.part, ThinkingPart):
+            return ThinkingEvent(content=model_response_stream_event.part.content)
+    if isinstance(model_response_stream_event, PartDeltaEvent):
+        if isinstance(model_response_stream_event.delta, TextPartDelta):
+            return TextEvent(
+                content=model_response_stream_event.delta.content_delta or "",
+                role="model",
+                more_body=True,
+            )
+        if isinstance(model_response_stream_event.delta, ThinkingPartDelta):
+            return ThinkingEvent(
+                content=model_response_stream_event.delta.content_delta or "",
+            )
 
     return None
 
@@ -136,7 +147,7 @@ async def _process_tool_events(
 
 async def _process_model_events(
     request_stream: AsyncIterable[ModelResponseStreamEvent],
-) -> AsyncIterator[TextEvent]:
+) -> AsyncIterator[TextEvent | ThinkingEvent]:
     async for request_event in request_stream:
         processed_event = _process_model_response_stream_event(request_event)
         if processed_event is None:

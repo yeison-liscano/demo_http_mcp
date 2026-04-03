@@ -298,3 +298,60 @@ body {
   max-height: 300px;
   overflow-y: auto;
 }
+
+/* ── Thinking card ── */
+.thinking-card {
+  margin-bottom: 0.75rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #f5f3ff;
+  overflow: hidden;
+}
+
+.thinking-card__header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.6rem 1rem;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 0.9rem;
+  text-align: left;
+  color: #6b7280;
+}
+
+.thinking-card__header:hover {
+  background: #ede9fe;
+}
+
+.thinking-card__label {
+  font-style: italic;
+  color: #7c3aed;
+  font-weight: 500;
+  flex: 1;
+}
+
+.thinking-card__chevron {
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  transition: transform 0.2s;
+  color: #a0aec0;
+}
+
+.thinking-card__chevron--open {
+  transform: rotate(90deg);
+}
+
+.thinking-card__body {
+  border-top: 1px solid #e2e8f0;
+  padding: 0.75rem 1rem;
+  font-style: italic;
+  color: #6b7280;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  max-height: 400px;
+  overflow-y: auto;
+}
