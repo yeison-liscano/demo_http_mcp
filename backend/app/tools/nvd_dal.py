@@ -30,7 +30,6 @@ def search_cpe(arg: Arguments[SearchCPEInput]) -> SearchCPEOutput:
         )
         for cpe in nvdlib.searchCPE(
             cpeMatchString=f"cpe:2.3:a:{arg.inputs.vendor}:{arg.inputs.product}:{arg.inputs.version}",
-            apiKey=get_key(arg.request),
         )
     )
     return SearchCPEOutput(cpes=results)
@@ -41,7 +40,6 @@ async def search_cve(arg: Arguments[SearchCVEInput]) -> SearchCVEOutput:
     results = await asyncio.to_thread(
         nvdlib.searchCVE,
         cpeName=arg.inputs.cpe_name,
-        apiKey=get_key(arg.request),
     )
     results = tuple(
         CVE.model_validate(

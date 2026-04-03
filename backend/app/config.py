@@ -7,5 +7,3 @@ class Config(BaseSettings):
     logfire_api_key: str
     logfire_project_id: str
     logfire_api_url: str
-    logfire_api_key: str
-    logfire_project_id: str

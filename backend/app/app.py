@@ -9,7 +9,6 @@ from pathlib import Path
 from typing import Annotated, Literal
 
 import fastapi
-import httpx
 import logfire
 import uvicorn
 from fastapi import Depends, FastAPI, Request
@@ -18,8 +17,6 @@ from fastapi.responses import Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from http_mcp.server import MCPServer
 from pydantic_ai import Agent
-from pydantic_ai.exceptions import UnexpectedModelBehavior
-from pydantic_ai.mcp import MCPServerStreamableHTTP
 from pydantic_ai.messages import (
     ModelMessage,
     ModelRequest,
@@ -30,13 +27,14 @@ from pydantic_ai.messages import (
 from typing_extensions import TypedDict
 
 from app.agen_memory import AgentMemory as Database
+from app.agent import stream_messages
 from app.prompts import PROMPTS
 from app.tools import TOOLS
 
 logfire.configure(send_to_logfire="if-token-present")
 logfire.instrument_pydantic_ai()
 
-agent = Agent("gemini-2.5-pro")
+agent = Agent("ollama:gemma4")
 THIS_DIR = Path(__file__).parent
 BACKEND_DIR = THIS_DIR.parent
 FRONTEND_DIR = BACKEND_DIR.parent / "frontend" / "dist"
@@ -82,7 +80,11 @@ async def get_db(request: Request) -> Database:
 async def get_chat(database: Annotated[Database, Depends(get_db)]) -> Response:
     msgs = await database.get_messages()
     return Response(
-        b"\n".join(json.dumps(to_chat_message(m)).encode("utf-8") for m in msgs),
+        b"\n".join(
+            json.dumps(cm).encode("utf-8")
+            for m in msgs
+            if (cm := to_chat_message(m)) is not None
+        ),
         media_type="text/plain",
     )
 
@@ -95,23 +97,24 @@ class ChatMessage(TypedDict):
     content: str
 
 
-def to_chat_message(m: ModelMessage) -> ChatMessage:
-    first_part = m.parts[0]
+def to_chat_message(m: ModelMessage) -> ChatMessage | None:
     if isinstance(m, ModelRequest):
-        if isinstance(first_part, UserPromptPart):
-            return {
-                "role": "user",
-                "timestamp": first_part.timestamp.isoformat(),
-                "content": str(first_part.content),
-            }
-    elif isinstance(m, ModelResponse) and isinstance(first_part, TextPart):
-        return {
-            "role": "model",
-            "timestamp": m.timestamp.isoformat(),
-            "content": first_part.content,
-        }
-    msg = f"Unexpected message type for chat app: {m}"
-    raise UnexpectedModelBehavior(msg)
+        for req_part in m.parts:
+            if isinstance(req_part, UserPromptPart):
+                return {
+                    "role": "user",
+                    "timestamp": req_part.timestamp.isoformat(),
+                    "content": str(req_part.content),
+                }
+    elif isinstance(m, ModelResponse):
+        for resp_part in m.parts:
+            if isinstance(resp_part, TextPart):
+                return {
+                    "role": "model",
+                    "timestamp": m.timestamp.isoformat(),
+                    "content": resp_part.content,
+                }
+    return None
 
 
 @app.post("/chat/")
@@ -119,7 +122,7 @@ async def post_chat(
     prompt: Annotated[str, fastapi.Form()],
     database: Annotated[Database, Depends(get_db)],
 ) -> StreamingResponse:
-    async def stream_messages() -> AsyncIterator[bytes]:
+    async def _stream_messages() -> AsyncIterator[bytes]:
         """Streams new line delimited JSON `Message`s to the client."""
         # stream the user prompt so that can be displayed straight away
         yield (
@@ -132,30 +135,10 @@ async def post_chat(
             ).encode("utf-8")
             + b"\n"
         )
+        async for chat_message in stream_messages(agent, prompt, database):
+            yield (chat_message.model_dump_json() + "\n").encode("utf-8")
 
-        http_client = httpx.AsyncClient(
-            headers={"Authorization": f"Bearer {os.getenv('NVD_API_KEY')}"},
-            timeout=httpx.Timeout(60.0),
-        )
-        server = MCPServerStreamableHTTP(
-            url="http://localhost:8000/mcp/",
-            http_client=http_client,
-            timeout=60,
-        )
-        # get the chat history so far to pass as context to the agent
-        messages = await database.get_messages()
-        # run the agent with the user prompt and the chat history
-        async with agent.run_stream(prompt, message_history=messages, toolsets=[server]) as result:
-            async for text in result.stream(debounce_by=0.01):
-                # text here is a `str` and the frontend wants
-                # JSON encoded ModelResponse, so we create one
-                m = ModelResponse(parts=[TextPart(text)], timestamp=result.timestamp())
-                yield json.dumps(to_chat_message(m)).encode("utf-8") + b"\n"
-
-        # add new messages (e.g. the user prompt and the agent response in this case)
-        await database.add_messages(result.new_messages_json())
-
-    return StreamingResponse(stream_messages(), media_type="text/plain")
+    return StreamingResponse(_stream_messages(), media_type="text/plain")
 
 
 def _mount_frontend() -> None:
