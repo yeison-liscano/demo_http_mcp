@@ -12,8 +12,10 @@ import fastapi
 import httpx
 import logfire
 import uvicorn
-from fastapi import Depends, Request
-from fastapi.responses import FileResponse, Response, StreamingResponse
+from fastapi import Depends, FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from http_mcp.server import MCPServer
 from pydantic_ai import Agent
 from pydantic_ai.exceptions import UnexpectedModelBehavior
@@ -36,6 +38,8 @@ logfire.instrument_pydantic_ai()
 
 agent = Agent("gemini-2.5-pro")
 THIS_DIR = Path(__file__).parent
+BACKEND_DIR = THIS_DIR.parent
+FRONTEND_DIR = BACKEND_DIR.parent / "frontend" / "dist"
 
 
 @asynccontextmanager
@@ -44,8 +48,23 @@ async def lifespan(_app: fastapi.FastAPI) -> AsyncIterator[dict[str, Database]]:
         yield {"db": db}
 
 
-app = fastapi.FastAPI(lifespan=lifespan)
+app = FastAPI(
+    lifespan=lifespan,
+    title="Vulnerability Agent",
+    description="A vulnerability agent that can help you check for vulnerabilities a dependency",
+)
+
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 logfire.instrument_fastapi(app)
+
 
 mcp_server = MCPServer(tools=TOOLS, prompts=PROMPTS, name="test", version="1.0.0")
 
@@ -53,17 +72,6 @@ app.mount(
     "/mcp",
     mcp_server.app,
 )
-
-
-@app.get("/")
-async def index() -> FileResponse:
-    return FileResponse((THIS_DIR / "chat_app.html"), media_type="text/html")
-
-
-@app.get("/chat_app.ts")
-async def main_ts() -> FileResponse:
-    """Get the raw typescript code, it's compiled in the browser, forgive me."""
-    return FileResponse((THIS_DIR / "chat_app.ts"), media_type="text/plain")
 
 
 async def get_db(request: Request) -> Database:
@@ -148,6 +156,32 @@ async def post_chat(
         await database.add_messages(result.new_messages_json())
 
     return StreamingResponse(stream_messages(), media_type="text/plain")
+
+
+def _mount_frontend() -> None:
+    """Mount the React frontend build if it exists (production mode)."""
+    if FRONTEND_DIR.is_dir():
+        # Serve index.html for the root and any non-API routes (SPA fallback)
+        @app.get("/")
+        async def index() -> Response:
+            index_html = FRONTEND_DIR / "index.html"
+            return Response(index_html.read_text(), media_type="text/html")
+
+        # Serve static assets (JS, CSS, images, etc.)
+        app.mount("/assets", StaticFiles(directory=FRONTEND_DIR / "assets"), name="static")
+
+        # SPA catch-all: serve index.html for any unmatched routes
+        @app.get("/{full_path:path}")
+        async def spa_fallback(full_path: str) -> Response:
+            # Try to serve the file if it exists, otherwise return index.html
+            file_path = FRONTEND_DIR / full_path
+            if file_path.is_file():
+                return Response(file_path.read_bytes(), media_type="application/octet-stream")
+            index_html = FRONTEND_DIR / "index.html"
+            return Response(index_html.read_text(), media_type="text/html")
+
+
+_mount_frontend()
 
 
 def main() -> None:

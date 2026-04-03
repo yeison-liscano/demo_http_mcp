@@ -1,4 +1,22 @@
-.venv/
-.npm
-*.sqlite
+# Backend
+backend/.venv/
+backend/.env
+backend/.ruff_cache/
+backend/.mypy_cache/
+backend/Fluid-Attacks-Results.csv
+backend/fluidattacks_sca_config.yaml
 __pycache__/
+*.sqlite
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+
+# IDE
+.vscode/
+.cursor/
+.gemini/
+
+# OS
+.npm
+.DS_Store
