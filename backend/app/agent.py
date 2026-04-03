@@ -29,36 +29,48 @@ from app.agen_memory import AgentMemory
 LOGGER = logging.getLogger(__name__)
 
 
-class ChatMessage(BaseModel):
-    """Format of messages sent to the browser."""
+class TextEvent(BaseModel):
+    """Text chunk streamed to the browser."""
 
+    type: Literal["text"] = "text"
     role: Literal["user", "model"]
     content: str
     timestamp: str = Field(default_factory=lambda: datetime.now(UTC).isoformat())
     more_body: bool = True
 
 
-class ToolExecutionRequest(BaseModel):
-    confirmation_id: str
+class ToolCallEvent(BaseModel):
+    """Emitted when the model invokes a tool."""
+
+    type: Literal["tool_call"] = "tool_call"
+    tool_call_id: str
     tool_name: str
     args: dict
+    timestamp: str = Field(default_factory=lambda: datetime.now(UTC).isoformat())
 
 
-class ToolExecutionResult(BaseModel):
+class ToolResultEvent(BaseModel):
+    """Emitted when a tool returns its result."""
+
+    type: Literal["tool_result"] = "tool_result"
     tool_call_id: str
     tool_name: str
     args: dict
     result: Any
+    timestamp: str = Field(default_factory=lambda: datetime.now(UTC).isoformat())
+
+
+StreamEvent = TextEvent | ToolCallEvent | ToolResultEvent
 
 
 def _process_model_response_stream_event(
     model_response_stream_event: ModelResponseStreamEvent,
-) -> ChatMessage | None:
+) -> TextEvent | None:
     if isinstance(model_response_stream_event, PartStartEvent) and isinstance(
         model_response_stream_event.part,
         TextPart,
     ):
-        return ChatMessage(
+        return TextEvent(
             content=model_response_stream_event.part.content,
             more_body=True,
             role="model",
@@ -67,7 +79,7 @@ def _process_model_response_stream_event(
         model_response_stream_event.delta,
         TextPartDelta | ThinkingPartDelta,
     ):
-        return ChatMessage(
+        return TextEvent(
             content=model_response_stream_event.delta.content_delta or "",
             role="model",
             more_body=True,
@@ -78,12 +90,20 @@ def _process_model_response_stream_event(
 
 def _process_handle_response_event(
     handle_response_event: HandleResponseEvent,
-) -> ToolReturnPart | ToolExecutionRequest | None:
+    called_tools: dict[str, ToolCallEvent],
+) -> ToolCallEvent | ToolResultEvent | None:
     if isinstance(handle_response_event, FunctionToolResultEvent) and isinstance(
         handle_response_event.result,
         ToolReturnPart,
     ):
-        return handle_response_event.result
+        tool_part = handle_response_event.result
+        call = called_tools.get(tool_part.tool_call_id)
+        return ToolResultEvent(
+            tool_call_id=tool_part.tool_call_id,
+            tool_name=tool_part.tool_name,
+            args=call.args if call else {},
+            result=tool_part.content,
+        )
     if isinstance(handle_response_event, FunctionToolCallEvent):
         part = handle_response_event.part
         args: dict | None = None
@@ -93,44 +113,30 @@ def _process_handle_response_event(
             args = {"args": part.args}
         if args is None:
             args = {}
-        return ToolExecutionRequest(
-            confirmation_id=part.tool_call_id,
+        event = ToolCallEvent(
+            tool_call_id=part.tool_call_id,
             tool_name=part.tool_name,
             args=args,
         )
+        called_tools[event.tool_call_id] = event
+        return event
     return None
-
-
-def _build_tool_execution_result(
-    tool_part: ToolReturnPart,
-    called_tools: dict[str, ToolExecutionRequest],
-) -> ToolExecutionResult:
-    args = (
-        called_tools[tool_part.tool_call_id].args
-        if tool_part.tool_call_id in called_tools
-        else {}
-    )
-    return ToolExecutionResult(
-        tool_call_id=tool_part.tool_call_id,
-        tool_name=tool_part.tool_name,
-        args=args,
-        result=tool_part.content,
-    )
 
 
 async def _process_tool_events(
     handle_stream: AsyncIterable[HandleResponseEvent],
-) -> None:
+    called_tools: dict[str, ToolCallEvent],
+) -> AsyncIterator[ToolCallEvent | ToolResultEvent]:
     async for event in handle_stream:
-        tool_part = _process_handle_response_event(event)
-        if tool_part is None:
+        tool_event = _process_handle_response_event(event, called_tools)
+        if tool_event is None:
             continue
-        print(tool_part)
+        yield tool_event
 
 
 async def _process_model_events(
     request_stream: AsyncIterable[ModelResponseStreamEvent],
-) -> AsyncIterator[ChatMessage]:
+) -> AsyncIterator[TextEvent]:
     async for request_event in request_stream:
         processed_event = _process_model_response_stream_event(request_event)
         if processed_event is None:
@@ -141,11 +147,13 @@ async def _process_model_events(
 async def _iterate_agent_nodes(
     run: AgentRun[None, str],
     database: AgentMemory,
-) -> AsyncIterator[ChatMessage]:
+) -> AsyncIterator[StreamEvent]:
+    called_tools: dict[str, ToolCallEvent] = {}
     async for node in run:
         if Agent.is_call_tools_node(node):
             async with node.stream(run.ctx) as handle_stream:
-                await _process_tool_events(handle_stream)
+                async for tool_event in _process_tool_events(handle_stream, called_tools):
+                    yield tool_event
             continue
         if Agent.is_model_request_node(node):
             async with node.stream(run.ctx) as request_stream:
@@ -153,7 +161,7 @@ async def _iterate_agent_nodes(
                     yield response
             continue
         if Agent.is_end_node(node):
-            yield ChatMessage(role="model", content="\n\n")
+            yield TextEvent(role="model", content="\n\n")
             if run.result:
                 await database.add_messages(run.result.new_messages_json())
 
@@ -162,7 +170,7 @@ async def stream_messages(
     agent: Agent,
     prompt: str,
     database: AgentMemory,
-) -> AsyncIterator[ChatMessage]:
+) -> AsyncIterator[StreamEvent]:
     messages = await database.get_messages()
     http_client = httpx.AsyncClient(
         headers={"Authorization": f"Bearer {os.getenv('NVD_API_KEY')}"},
@@ -185,7 +193,7 @@ async def stream_messages(
                 yield response
         except ModelHTTPError:
             LOGGER.exception("Error streaming messages")
-            yield ChatMessage(
+            yield TextEvent(
                 role="model",
                 content="Error Streaming",
                 more_body=False,
