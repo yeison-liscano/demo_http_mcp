@@ -3,6 +3,7 @@ export interface TextEvent {
   role: "user" | "model";
   content: string;
   timestamp: string;
+  more_body?: boolean;
 }
 
 export interface ToolCallEvent {
@@ -22,4 +23,14 @@ export interface ToolResultEvent {
   timestamp: string;
 }
 
-export type StreamEvent = TextEvent | ToolCallEvent | ToolResultEvent;
+export interface ThinkingEvent {
+  type: "thinking";
+  content: string;
+  timestamp: string;
+}
+
+export type StreamEvent =
+  | TextEvent
+  | ToolCallEvent
+  | ToolResultEvent
+  | ThinkingEvent;

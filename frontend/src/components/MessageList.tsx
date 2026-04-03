@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import type { StreamEvent, ToolCallEvent, ToolResultEvent } from "../types";
 import MessageBubble from "./MessageBubble";
+import ThinkingCard from "./ThinkingCard";
 import ToolCard from "./ToolCard";
 
 interface MessageListProps {
@@ -41,6 +42,14 @@ export default function MessageList({ events }: MessageListProps) {
             <MessageBubble
               key={`text-${event.role}-${event.timestamp}`}
               message={event}
+            />
+          );
+        }
+        if (event.type === "thinking") {
+          return (
+            <ThinkingCard
+              key={`thinking-${event.timestamp}`}
+              event={event}
             />
           );
         }
