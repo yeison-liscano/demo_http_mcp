@@ -92,6 +92,7 @@ async def get_chat(database: Annotated[Database, Depends(get_db)]) -> Response:
 class ChatMessage(TypedDict):
     """Format of messages sent to the browser."""
 
+    type: Literal["text"]
     role: Literal["user", "model"]
     timestamp: str
     content: str
@@ -102,6 +103,7 @@ def to_chat_message(m: ModelMessage) -> ChatMessage | None:
         for req_part in m.parts:
             if isinstance(req_part, UserPromptPart):
                 return {
+                    "type": "text",
                     "role": "user",
                     "timestamp": req_part.timestamp.isoformat(),
                     "content": str(req_part.content),
@@ -110,6 +112,7 @@ def to_chat_message(m: ModelMessage) -> ChatMessage | None:
         for resp_part in m.parts:
             if isinstance(resp_part, TextPart):
                 return {
+                    "type": "text",
                     "role": "model",
                     "timestamp": m.timestamp.isoformat(),
                     "content": resp_part.content,
@@ -128,6 +131,7 @@ async def post_chat(
         yield (
             json.dumps(
                 {
+                    "type": "text",
                     "role": "user",
                     "timestamp": datetime.now(tz=UTC).isoformat(),
                     "content": prompt,
