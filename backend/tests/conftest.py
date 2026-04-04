@@ -168,17 +168,29 @@ def fake_search_cpe() -> SearchCPECapture:
 
 @pytest.fixture
 def mock_search_cve(fake_search_cve: SearchCVECapture) -> Mock:
+    import functools
+
+    @functools.wraps(nvdlib.searchCVE)
+    def searchCVE(*args: object, **kwargs: object) -> object:  # noqa: N802
+        return fake_search_cve(*args, **kwargs)
+
     return Mock(
         module_where_used=nvdlib,
         current_value=nvdlib.searchCVE,
-        new_value=fake_search_cve,
+        new_value=searchCVE,
     )
 
 
 @pytest.fixture
 def mock_search_cpe(fake_search_cpe: SearchCPECapture) -> Mock:
+    import functools
+
+    @functools.wraps(nvdlib.searchCPE)
+    def searchCPE(*args: object, **kwargs: object) -> object:  # noqa: N802
+        return fake_search_cpe(*args, **kwargs)
+
     return Mock(
         module_where_used=nvdlib,
         current_value=nvdlib.searchCPE,
-        new_value=fake_search_cpe,
+        new_value=searchCPE,
     )
