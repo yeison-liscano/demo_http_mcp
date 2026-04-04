@@ -85,8 +85,8 @@ def make_fake_cpe(
 class SearchCVECapture:
     """Captures kwargs passed to the fake searchCVE and returns fake results."""
 
-    def __init__(self, results: list[FakeNvdlibCVE] | None = None) -> None:
-        self.results = results if results is not None else [make_fake_cve()]
+    def __init__(self, results: list[object] | None = None) -> None:
+        self.results: list[object] = results if results is not None else [make_fake_cve()]
         self.captured_kwargs: dict[str, object] = {}
 
     def __call__(self, **kwargs: object) -> list[object]:
@@ -97,8 +97,8 @@ class SearchCVECapture:
 class SearchCPECapture:
     """Captures kwargs passed to the fake searchCPE and returns fake results."""
 
-    def __init__(self, results: list[FakeNvdlibCPE] | None = None) -> None:
-        self.results = results if results is not None else [make_fake_cpe()]
+    def __init__(self, results: list[object] | None = None) -> None:
+        self.results: list[object] = results if results is not None else [make_fake_cpe()]
         self.captured_kwargs: dict[str, object] = {}
 
     def __call__(self, **kwargs: object) -> list[object]:

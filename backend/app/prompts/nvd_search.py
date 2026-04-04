@@ -2,8 +2,9 @@ import asyncio
 import json
 import re
 
+from http_mcp._mcp_types.content import TextContent
+from http_mcp._mcp_types.prompts import PromptMessage
 from http_mcp.types import Arguments
-from mcp.types import PromptMessage, TextContent
 from pydantic import BaseModel, Field, field_validator
 
 from app.tools.models import SearchCPEInput, SearchCVEInput

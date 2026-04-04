@@ -34,14 +34,14 @@ class TestCVEParseScore:
 
     def test_dict_input(self) -> None:
         cve = make_fake_cve()
-        cve.score = {"version": "V40", "base_score": 8.0, "severity": "HIGH"}
+        cve.score = {"version": "V40", "base_score": 8.0, "severity": "HIGH"}  # type: ignore[attr-defined]
         validated = CVE.model_validate(cve, by_alias=True, from_attributes=True)
         assert validated.score.version == "V40"
         assert validated.score.base_score == 8.0
 
     def test_fallback_on_unexpected_input(self) -> None:
         cve = make_fake_cve()
-        cve.score = "not a valid score"
+        cve.score = "not a valid score"  # type: ignore[attr-defined]
         validated = CVE.model_validate(cve, by_alias=True, from_attributes=True)
         assert validated.score.version is None
         assert validated.score.base_score is None
