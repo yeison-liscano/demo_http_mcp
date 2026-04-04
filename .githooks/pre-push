@@ -1,0 +1,4 @@
+: && cd backend \
+&& ruff check \
+&& mypy . \
+&& pytest  tests/

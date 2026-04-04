@@ -1,0 +1,27 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "prompt",
+            "command": "Excute ruff, and mypy"
+          }
+        ]
+      }
+    ]
+  },
+  "PreToolUse": [
+    {
+      "matcher": "Write|Edit",
+      "hooks": [
+        {
+          "type": "prompt",
+          "prompt": "Review the code about to be written or edited for security anti-patterns. Check for:\n\n1. **Hardcoded secrets** — passwords, API keys, tokens, or private keys in string literals\n2. **Injection vulnerabilities** — SQL via string concatenation, command injection via shell=True or exec(), eval() with dynamic input\n3. **XSS vectors** — innerHTML, dangerouslySetInnerHTML with unsanitized input, document.write\n4. **Insecure crypto** — MD5/SHA1 for passwords, Math.random() for security, hardcoded encryption keys\n5. **Missing input validation** — User input passed directly to database queries, file operations, or external commands\n6. **Sensitive data exposure** — Logging passwords/tokens, returning internal details in error responses\n\nIf you find a CRITICAL issue (hardcoded secrets, clear injection vulnerability, or authentication bypass), BLOCK the write and explain the issue with a secure alternative.\n\nIf you find a MEDIUM issue (weak patterns that could be improved), WARN but allow the write, noting what should be improved.\n\nIf the code looks safe, approve silently.\n\nOnly evaluate the security aspects — do not comment on style, naming, or non-security concerns.",
+          "timeout": 30
+        }
+      ]
+    }
+  ]
+}
