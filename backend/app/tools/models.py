@@ -107,7 +107,48 @@ class CVE(BaseValidator):
 
 
 class SearchCVEInput(BaseModel):
-    cpe_name: str = Field(description="CPE name of the CVE")
+    cve_id: str | None = Field(description="Exact CVE ID (e.g. CVE-2023-44487)", default=None)
+    cpe_name: str | None = Field(description="CPE name to search CVEs for", default=None)
+    keyword_search: str | None = Field(
+        description="Keyword search in CVE descriptions",
+        default=None,
+    )
+    cwe_id: str | None = Field(description="CWE ID (e.g. CWE-79)", default=None)
+    cvss_v3_severity: str | None = Field(
+        description="CVSS V3 severity: LOW, MEDIUM, HIGH, CRITICAL",
+        default=None,
+    )
+    has_kev: bool | None = Field(
+        description="Filter for Known Exploited Vulnerabilities",
+        default=None,
+    )
+    no_rejected: bool | None = Field(description="Exclude rejected CVEs", default=None)
+    pub_start_date: str | None = Field(
+        description="Start date for publication range (ISO 8601)",
+        default=None,
+    )
+    pub_end_date: str | None = Field(
+        description="End date for publication range (ISO 8601)",
+        default=None,
+    )
+
+    @model_validator(mode="after")
+    def at_least_one_filter(self) -> "SearchCVEInput":
+        fields = [
+            self.cve_id,
+            self.cpe_name,
+            self.keyword_search,
+            self.cwe_id,
+            self.cvss_v3_severity,
+            self.has_kev,
+            self.no_rejected,
+            self.pub_start_date,
+            self.pub_end_date,
+        ]
+        if not any(f is not None for f in fields):
+            msg = "At least one search filter must be provided"
+            raise ValueError(msg)
+        return self
 
 
 class SearchCVEOutput(BaseModel):
