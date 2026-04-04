@@ -36,17 +36,34 @@ def search_cpe(arg: Arguments[SearchCPEInput]) -> SearchCPEOutput:
 
 
 async def search_cve(arg: Arguments[SearchCVEInput]) -> SearchCVEOutput:
-    """Search Common Vulnerabilities and Exposures (CVE) for a given CPE."""
-    results = await asyncio.to_thread(
-        nvdlib.searchCVE,
-        cpeName=arg.inputs.cpe_name,
-    )
+    """Search Common Vulnerabilities and Exposures (CVE) with flexible filters.
+
+    Supports searching by CVE ID, CPE name, keyword, CWE ID, CVSS severity,
+    Known Exploited Vulnerabilities, and publication date range.
+    """
+    field_mapping = {
+        "cve_id": "cveId",
+        "cpe_name": "cpeName",
+        "keyword_search": "keywordSearch",
+        "cwe_id": "cweId",
+        "cvss_v3_severity": "cvssV3Severity",
+        "has_kev": "hasKev",
+        "no_rejected": "noRejected",
+        "pub_start_date": "pubStartDate",
+        "pub_end_date": "pubEndDate",
+    }
+    kwargs = {
+        param: getattr(arg.inputs, field)
+        for field, param in field_mapping.items()
+        if getattr(arg.inputs, field) is not None
+    }
+    raw_results = await asyncio.to_thread(nvdlib.searchCVE, **kwargs)
     results = tuple(
         CVE.model_validate(
             cve,
             by_alias=True,
             from_attributes=True,
         )
-        for cve in results
+        for cve in raw_results
     )
     return SearchCVEOutput(cves=results)
