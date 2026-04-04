@@ -1,6 +1,5 @@
 from unittest.mock import MagicMock
 
-import nvdlib
 from http_mcp.types import Arguments
 from pymocks import Mock, with_mock
 
@@ -8,8 +7,6 @@ from app.tools.nvd_dal import search_cpe, search_cve
 from tests.conftest import (
     SearchCPECapture,
     SearchCVECapture,
-    make_fake_cpe,
-    make_fake_cve,
 )
 
 
@@ -20,7 +17,7 @@ def _make_arguments(inputs: object) -> Arguments:
 
 
 class TestSearchCVE:
-    async def test_cve_id_maps_to_cveId(
+    async def test_cve_id_maps_to_cve_id(
         self,
         fake_search_cve: SearchCVECapture,
         mock_search_cve: Mock,
@@ -100,7 +97,7 @@ class TestSearchCVE:
 
     async def test_results_validated_into_pydantic_models(
         self,
-        fake_search_cve: SearchCVECapture,
+        fake_search_cve: SearchCVECapture,  # noqa: ARG002
         mock_search_cve: Mock,
     ) -> None:
         from app.tools.models import CVE, CVSSScore, SearchCVEInput
@@ -126,7 +123,7 @@ class TestSearchCPE:
 
         args = _make_arguments(SearchCPEInput(product="curl", version="8.4.0", vendor="haxx"))
         with with_mock(mock_search_cpe):
-            result = search_cpe(args)
+            search_cpe(args)
         assert fake_search_cpe.captured_kwargs["cpeMatchString"] == "cpe:2.3:a:haxx:curl:8.4.0"
 
     def test_default_vendor_wildcard(
@@ -139,11 +136,11 @@ class TestSearchCPE:
         args = _make_arguments(SearchCPEInput(product="curl", version="8.4.0"))
         with with_mock(mock_search_cpe):
             search_cpe(args)
-        assert "cpe:2.3:a:*:curl:8.4.0" == fake_search_cpe.captured_kwargs["cpeMatchString"]
+        assert fake_search_cpe.captured_kwargs["cpeMatchString"] == "cpe:2.3:a:*:curl:8.4.0"
 
     def test_results_validated_into_pydantic_models(
         self,
-        fake_search_cpe: SearchCPECapture,
+        fake_search_cpe: SearchCPECapture,  # noqa: ARG002
         mock_search_cpe: Mock,
     ) -> None:
         from app.tools.models import CPE, SearchCPEInput
