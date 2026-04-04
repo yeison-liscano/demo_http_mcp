@@ -22,9 +22,12 @@ from pydantic_ai.messages import (
     ModelRequest,
     ModelResponse,
     TextPart,
+    ThinkingPart,
+    ToolCallPart,
+    ToolReturnPart,
     UserPromptPart,
 )
-from typing_extensions import TypedDict
+from typing_extensions import Any, TypedDict
 
 from app.agen_memory import AgentMemory as Database
 from app.agent import stream_messages
@@ -79,45 +82,66 @@ async def get_db(request: Request) -> Database:
 @app.get("/chat/")
 async def get_chat(database: Annotated[Database, Depends(get_db)]) -> Response:
     msgs = await database.get_messages()
-    return Response(
-        b"\n".join(
-            json.dumps(cm).encode("utf-8")
-            for m in msgs
-            if (cm := to_chat_message(m)) is not None
-        ),
-        media_type="text/plain",
-    )
+    lines: list[bytes] = []
+    for m in msgs:
+        for event in to_chat_events(m):
+            lines.append(json.dumps(event).encode("utf-8"))
+    return Response(b"\n".join(lines), media_type="text/plain")
 
 
-class ChatMessage(TypedDict):
-    """Format of messages sent to the browser."""
-
-    type: Literal["text"]
-    role: Literal["user", "model"]
-    timestamp: str
-    content: str
-
-
-def to_chat_message(m: ModelMessage) -> ChatMessage | None:
+def to_chat_events(m: ModelMessage) -> list[dict[str, Any]]:
+    """Convert a stored ModelMessage into frontend StreamEvent dicts."""
+    events: list[dict[str, Any]] = []
     if isinstance(m, ModelRequest):
         for req_part in m.parts:
             if isinstance(req_part, UserPromptPart):
-                return {
+                events.append({
                     "type": "text",
                     "role": "user",
                     "timestamp": req_part.timestamp.isoformat(),
                     "content": str(req_part.content),
-                }
+                })
+            elif isinstance(req_part, ToolReturnPart):
+                events.append({
+                    "type": "tool_result",
+                    "tool_call_id": req_part.tool_call_id,
+                    "tool_name": req_part.tool_name,
+                    "args": {},
+                    "result": req_part.content,
+                    "timestamp": req_part.timestamp.isoformat() if req_part.timestamp else "",
+                })
     elif isinstance(m, ModelResponse):
         for resp_part in m.parts:
             if isinstance(resp_part, TextPart):
-                return {
+                events.append({
                     "type": "text",
                     "role": "model",
                     "timestamp": m.timestamp.isoformat(),
                     "content": resp_part.content,
-                }
-    return None
+                })
+            elif isinstance(resp_part, ThinkingPart):
+                events.append({
+                    "type": "thinking",
+                    "content": resp_part.content,
+                    "timestamp": m.timestamp.isoformat(),
+                })
+            elif isinstance(resp_part, ToolCallPart):
+                args: dict[str, Any] = {}
+                if isinstance(resp_part.args, str):
+                    try:
+                        args = json.loads(resp_part.args)
+                    except json.JSONDecodeError:
+                        args = {"raw": resp_part.args}
+                elif isinstance(resp_part.args, dict):
+                    args = resp_part.args
+                events.append({
+                    "type": "tool_call",
+                    "tool_call_id": resp_part.tool_call_id,
+                    "tool_name": resp_part.tool_name,
+                    "args": args,
+                    "timestamp": m.timestamp.isoformat(),
+                })
+    return events
 
 
 @app.post("/chat/")

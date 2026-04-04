@@ -1,8 +1,8 @@
-import type { TextEvent, StreamEvent } from "./types";
+import type { TextEvent as AppTextEvent, StreamEvent } from "./types";
 
 const API_BASE = "/api";
 
-export async function fetchChatHistory(): Promise<TextEvent[]> {
+export async function fetchChatHistory(): Promise<StreamEvent[]> {
   const response = await fetch(`${API_BASE}/chat/`);
   if (!response.ok) {
     throw new Error(`Failed to fetch chat history: ${response.status}`);
@@ -11,7 +11,7 @@ export async function fetchChatHistory(): Promise<TextEvent[]> {
   return text
     .split("\n")
     .filter((line) => line.trim().length > 0)
-    .map((line) => JSON.parse(line) as TextEvent);
+    .map((line) => JSON.parse(line) as StreamEvent);
 }
 
 export async function sendChatMessage(
@@ -37,7 +37,7 @@ export async function sendChatMessage(
 
   const decoder = new TextDecoder();
   let buffer = "";
-  let userMessage: TextEvent | null = null;
+  let userMessage: AppTextEvent | null = null;
   let modelContent = "";
   let modelTimestamp = "";
   let thinkingContent = "";
