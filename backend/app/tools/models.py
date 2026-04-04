@@ -137,7 +137,7 @@ class SearchCVEInput(BaseModel):
     )
 
     @model_validator(mode="after")
-    def at_least_one_filter(self) -> "SearchCVEInput":
+    def validate_filters(self) -> "SearchCVEInput":
         fields = [
             self.cve_id,
             self.cpe_name,
@@ -151,6 +151,9 @@ class SearchCVEInput(BaseModel):
         ]
         if not any(f is not None for f in fields):
             msg = "At least one search filter must be provided"
+            raise ValueError(msg)
+        if (self.pub_start_date is None) != (self.pub_end_date is None):
+            msg = "pub_start_date and pub_end_date must be provided together"
             raise ValueError(msg)
         return self
 
