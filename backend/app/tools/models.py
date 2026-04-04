@@ -62,7 +62,7 @@ class CVSSScore(BaseModel):
     """Best available CVSS score extracted from nvdlib's composite score attribute."""
 
     version: str | None = Field(description="CVSS version (e.g. 'V31', 'V40', 'V2')", default=None)
-    score: float | None = Field(description="CVSS base score (0-10)", default=None)
+    base_score: float | None = Field(description="CVSS base score (0-10)", default=None)
     severity: str | None = Field(description="Severity level (LOW, MEDIUM, HIGH, CRITICAL)", default=None)
 
 
@@ -76,9 +76,10 @@ class CVE(BaseValidator):
     published: str = Field(
         description="ISO 8601 date/time format including time zone. - CVE publication date",
     )
-    last_modified: str = Field(
+    last_modified: str | None = Field(
         alias="lastModified",
         description="CVE last modified date (ISO 8601)",
+        default=None,
     )
     vuln_status: str | None = Field(
         alias="vulnStatus",
@@ -86,20 +87,23 @@ class CVE(BaseValidator):
         default=None,
     )
     descriptions: list[CVEDescription] = Field(description="Descriptions of the CVE")
-    score: CVSSScore = Field(description="Best available CVSS score (prefers V4.0 > V3.1 > V3.0 > V2)")
+    score: CVSSScore = Field(
+        description="Best available CVSS score (prefers V4.0 > V3.1 > V3.0 > V2)",
+        default_factory=CVSSScore,
+    )
     weaknesses: list[Weakness] = Field(description="Weaknesses of the CVE")
     references: list[CVEReference] = Field(description="References of the CVE")
-    url: str = Field(description="Link to NVD detail page")
+    url: str | None = Field(description="Link to NVD detail page", default=None)
 
     @field_validator("score", mode="before")
     @classmethod
     def parse_score(cls, v: object) -> dict[str, object]:
         """Convert nvdlib's score list [version, score, severity] to a dict."""
         if isinstance(v, list) and len(v) == 3:
-            return {"version": v[0], "score": v[1], "severity": v[2]}
+            return {"version": v[0], "base_score": v[1], "severity": v[2]}
         if isinstance(v, dict):
             return v
-        return {"version": None, "score": None, "severity": None}
+        return {"version": None, "base_score": None, "severity": None}
 
 
 class SearchCVEInput(BaseModel):
