@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 MIN_LENGTH = 2
 MAX_VERSION_LENGTH = 15
 MAX_NAME_LENGTH = 100
+SCORE_LIST_LENGTH = 3
 
 
 class BaseValidator(BaseModel):
@@ -63,7 +64,10 @@ class CVSSScore(BaseModel):
 
     version: str | None = Field(description="CVSS version (e.g. 'V31', 'V40', 'V2')", default=None)
     base_score: float | None = Field(description="CVSS base score (0-10)", default=None)
-    severity: str | None = Field(description="Severity level (LOW, MEDIUM, HIGH, CRITICAL)", default=None)
+    severity: str | None = Field(
+        description="Severity level (LOW, MEDIUM, HIGH, CRITICAL)",
+        default=None,
+    )
 
 
 class CVE(BaseValidator):
@@ -99,7 +103,7 @@ class CVE(BaseValidator):
     @classmethod
     def parse_score(cls, v: object) -> dict[str, object]:
         """Convert nvdlib's score list [version, score, severity] to a dict."""
-        if isinstance(v, list) and len(v) == 3:
+        if isinstance(v, list) and len(v) == SCORE_LIST_LENGTH:
             return {"version": v[0], "base_score": v[1], "severity": v[2]}
         if isinstance(v, dict):
             return v
