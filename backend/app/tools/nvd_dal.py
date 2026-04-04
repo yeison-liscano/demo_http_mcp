@@ -52,10 +52,12 @@ async def search_cve(arg: Arguments[SearchCVEInput]) -> SearchCVEOutput:
         "pub_start_date": "pubStartDate",
         "pub_end_date": "pubEndDate",
     }
+    flag_fields = {"has_kev", "no_rejected"}
     kwargs = {
         param: getattr(arg.inputs, field)
         for field, param in field_mapping.items()
         if getattr(arg.inputs, field) is not None
+        and (field not in flag_fields or getattr(arg.inputs, field))
     }
     raw_results = await asyncio.to_thread(nvdlib.searchCVE, **kwargs)
     results = tuple(
