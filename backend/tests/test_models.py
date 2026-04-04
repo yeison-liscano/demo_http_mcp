@@ -2,13 +2,12 @@ import pytest
 from pydantic import ValidationError
 
 from app.tools.models import (
-    CPE,
     CVE,
     CVSSScore,
     SearchCPEInput,
     SearchCVEInput,
 )
-from tests.conftest import make_fake_cve, make_fake_cpe, FakeNvdlibCVE
+from tests.conftest import FakeNvdlibCVE, make_fake_cve
 
 
 class TestCVSSScore:

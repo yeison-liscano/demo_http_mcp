@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
-from typing import Dict, List, Optional, Union
+import functools
 
 import nvdlib
 import pytest
@@ -90,43 +89,9 @@ class SearchCVECapture:
         self.results = results if results is not None else [make_fake_cve()]
         self.captured_kwargs: dict[str, object] = {}
 
-    def __call__(
-        self,
-        cpeName: Optional[str] = None,
-        cveId: Optional[str] = None,
-        cvssV2Metrics: Optional[str] = None,
-        cvssV2Severity: Optional[str] = None,
-        cvssV3Metrics: Optional[str] = None,
-        cvssV3Severity: Optional[str] = None,
-        cweId: Optional[str] = None,
-        hasCertAlerts: Optional[bool] = None,
-        hasCertNotes: Optional[bool] = None,
-        hasKev: Optional[bool] = None,
-        hasOval: Optional[bool] = None,
-        isVulnerable: Optional[bool] = None,
-        keywordExactMatch: Optional[bool] = None,
-        keywordSearch: Optional[str] = None,
-        lastModStartDate: Optional[Union[str, datetime]] = None,
-        lastModEndDate: Optional[Union[str, datetime]] = None,
-        noRejected: Optional[bool] = None,
-        pubStartDate: Optional[Union[str, datetime]] = None,
-        pubEndDate: Optional[Union[str, datetime]] = None,
-        sourceIdentifier: Optional[str] = None,
-        versionEnd: Optional[str] = None,
-        versionEndType: Optional[str] = None,
-        versionStart: Optional[str] = None,
-        versionStartType: Optional[str] = None,
-        virtualMatchString: Optional[str] = None,
-        limit: Optional[int] = None,
-        delay: Optional[float] = None,
-        key: Optional[str] = None,
-        verbose: Optional[bool] = None,
-        proxies: Optional[Dict] = None,
-    ) -> List[nvdlib.classes.CVE]:
-        self.captured_kwargs = {
-            k: v for k, v in locals().items() if k != "self" and v is not None
-        }
-        return self.results  # type: ignore[return-value]
+    def __call__(self, **kwargs: object) -> list[object]:
+        self.captured_kwargs = {k: v for k, v in kwargs.items() if v is not None}
+        return self.results
 
 
 class SearchCPECapture:
@@ -136,24 +101,9 @@ class SearchCPECapture:
         self.results = results if results is not None else [make_fake_cpe()]
         self.captured_kwargs: dict[str, object] = {}
 
-    def __call__(
-        self,
-        cpeNameId: Optional[str] = None,
-        cpeMatchString: Optional[str] = None,
-        keywordExactMatch: Optional[bool] = None,
-        keywordSearch: Optional[str] = None,
-        lastModStartDate: Optional[Union[str, datetime]] = None,
-        lastModEndDate: Optional[Union[str, datetime]] = None,
-        matchCriteriaId: Optional[str] = None,
-        limit: Optional[int] = None,
-        key: Optional[str] = None,
-        delay: Optional[float] = None,
-        proxies: Optional[Dict] = None,
-    ) -> List[nvdlib.classes.CPE]:
-        self.captured_kwargs = {
-            k: v for k, v in locals().items() if k != "self" and v is not None
-        }
-        return self.results  # type: ignore[return-value]
+    def __call__(self, **kwargs: object) -> list[object]:
+        self.captured_kwargs = {k: v for k, v in kwargs.items() if v is not None}
+        return self.results
 
 
 @pytest.fixture
@@ -168,29 +118,25 @@ def fake_search_cpe() -> SearchCPECapture:
 
 @pytest.fixture
 def mock_search_cve(fake_search_cve: SearchCVECapture) -> Mock:
-    import functools
-
     @functools.wraps(nvdlib.searchCVE)
-    def searchCVE(*args: object, **kwargs: object) -> object:  # noqa: N802
+    def wrapper(*args: object, **kwargs: object) -> object:
         return fake_search_cve(*args, **kwargs)
 
     return Mock(
         module_where_used=nvdlib,
         current_value=nvdlib.searchCVE,
-        new_value=searchCVE,
+        new_value=wrapper,
     )
 
 
 @pytest.fixture
 def mock_search_cpe(fake_search_cpe: SearchCPECapture) -> Mock:
-    import functools
-
     @functools.wraps(nvdlib.searchCPE)
-    def searchCPE(*args: object, **kwargs: object) -> object:  # noqa: N802
+    def wrapper(*args: object, **kwargs: object) -> object:
         return fake_search_cpe(*args, **kwargs)
 
     return Mock(
         module_where_used=nvdlib,
         current_value=nvdlib.searchCPE,
-        new_value=searchCPE,
+        new_value=wrapper,
     )
