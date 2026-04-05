@@ -6,9 +6,10 @@ import ToolCard from "./ToolCard";
 
 interface MessageListProps {
   events: StreamEvent[];
+  loading?: boolean;
 }
 
-export default function MessageList({ events }: MessageListProps) {
+export default function MessageList({ events, loading }: MessageListProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -48,7 +49,7 @@ export default function MessageList({ events }: MessageListProps) {
         if (event.type === "thinking") {
           return (
             <ThinkingCard
-              key={`thinking-${event.timestamp}`}
+              key={`thinking-${event.timestamp}-${i}`}
               event={event}
             />
           );
@@ -84,6 +85,16 @@ export default function MessageList({ events }: MessageListProps) {
         }
         return null;
       })}
+      {loading && (
+        <div className="loading-indicator">
+          <div className="loading-indicator__dots">
+            <span className="loading-indicator__dot" />
+            <span className="loading-indicator__dot" />
+            <span className="loading-indicator__dot" />
+          </div>
+          <span className="loading-indicator__text">Working...</span>
+        </div>
+      )}
       <div ref={bottomRef} />
     </div>
   );

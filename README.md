@@ -6,6 +6,8 @@ exposing example Tools and Prompts to any MCP-capable client. The project
 includes a React frontend that provides a chat interface for querying
 vulnerabilities via the NVD (National Vulnerability Database).
 
+[![Chat UI](https://img.youtube.com/vi/BzrVV2y8g1Q/0.jpg)](https://youtube.com/shorts/BzrVV2y8g1Q)
+
 <a href="https://glama.ai/mcp/servers/@yeison-liscano/demo_http_mcp">
   <img width="380" height="200" src="https://glama.ai/mcp/servers/@yeison-liscano/demo_http_mcp/badge" alt="Demo HTTP Server MCP server" />
 </a>

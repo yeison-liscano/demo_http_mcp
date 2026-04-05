@@ -40,9 +40,11 @@ export async function sendChatMessage(
   let userMessage: AppTextEvent | null = null;
   let modelContent = "";
   let modelTimestamp = "";
-  let thinkingContent = "";
-  let thinkingTimestamp = "";
-  const toolEvents: StreamEvent[] = [];
+  // Track middle events (thinking, tool_call, tool_result) in arrival order.
+  // Consecutive thinking chunks share one entry; a non-thinking event in
+  // between starts a new thinking block the next time one arrives.
+  const middleEvents: StreamEvent[] = [];
+  let activeThinkingIdx = -1; // index into middleEvents for current thinking block
 
   while (true) {
     const { done, value } = await reader.read();
@@ -67,12 +69,24 @@ export async function sendChatMessage(
           }
           break;
         case "thinking":
-          if (!thinkingTimestamp) thinkingTimestamp = chunk.timestamp;
-          thinkingContent += chunk.content;
+          if (activeThinkingIdx >= 0) {
+            // Append to current thinking block
+            const prev = middleEvents[activeThinkingIdx] as import("./types").ThinkingEvent;
+            prev.content += chunk.content;
+          } else {
+            // Start a new thinking block
+            activeThinkingIdx = middleEvents.length;
+            middleEvents.push({
+              type: "thinking",
+              timestamp: chunk.timestamp,
+              content: chunk.content,
+            });
+          }
           break;
         case "tool_call":
         case "tool_result":
-          toolEvents.push(chunk);
+          activeThinkingIdx = -1; // break the current thinking block
+          middleEvents.push(chunk);
           break;
       }
     }
@@ -80,14 +94,7 @@ export async function sendChatMessage(
     // Build ordered event list
     const events: StreamEvent[] = [];
     if (userMessage) events.push(userMessage);
-    if (thinkingContent) {
-      events.push({
-        type: "thinking",
-        timestamp: thinkingTimestamp,
-        content: thinkingContent,
-      });
-    }
-    events.push(...toolEvents);
+    events.push(...middleEvents);
     if (modelContent) {
       events.push({
         type: "text",

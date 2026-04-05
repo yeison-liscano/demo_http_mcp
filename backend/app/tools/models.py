@@ -163,9 +163,12 @@ class SearchCVEOutput(BaseModel):
 
 
 class SearchCPEInput(BaseModel):
-    product: str = Field(description="Product of the CPE")
+    product: str = Field(description="Product of the CPE. Useally the dependency name")
     version: str = Field(description="Version of the CPE")
-    vendor: str = Field(description="Vendor of the CPE", default="*")
+    vendor: str = Field(
+        description="Vendor of the CPE. Usually is the same as the product",
+        default="*",
+    )
 
     @field_validator("product", mode="after")
     @classmethod

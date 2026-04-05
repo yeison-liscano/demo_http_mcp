@@ -54,7 +54,7 @@ export default function ChatApp() {
         <p>Ask me about vulnerabilities in any dependency</p>
       </header>
 
-      <MessageList events={events} />
+      <MessageList events={events} loading={sending} />
 
       {error && <div className="chat-app__error">{error}</div>}
 
