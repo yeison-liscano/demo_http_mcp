@@ -1,15 +1,22 @@
-import os
+"""MCP tool integration tests (no auth — tests tool logic directly)."""
+
 from http import HTTPStatus
 
-os.environ.setdefault("OLLAMA_BASE_URL", "http://localhost:11434")
-
+from http_mcp.server import MCPServer
 from pymocks import Mock, with_mock
+from starlette.applications import Starlette
+from starlette.routing import Mount
 from starlette.testclient import TestClient
 
-from app.app import app
+from app.prompts import PROMPTS
+from app.tools import TOOLS
 from tests.conftest import SearchCPECapture, SearchCVECapture
 
 HTTP_OK = HTTPStatus.OK.value
+
+# Standalone MCP server without auth for testing tool logic
+_mcp_server = MCPServer(tools=TOOLS, prompts=PROMPTS, name="test", version="1.0.0")
+_app = Starlette(routes=[Mount("/", _mcp_server.app)])
 
 
 def _jsonrpc(method: str, params: dict | None = None, req_id: int = 1) -> dict:
@@ -44,14 +51,12 @@ class TestMCPSearchCVE:
         fake_search_cve: SearchCVECapture,  # noqa: ARG002
         mock_search_cve: Mock,
     ) -> None:
-        with with_mock(mock_search_cve), TestClient(app) as client:
-            # Initialize the MCP session
-            init_resp = client.post("/mcp/", json=_init_request())
+        with with_mock(mock_search_cve), TestClient(_app) as client:
+            init_resp = client.post("/", json=_init_request())
             assert init_resp.status_code == HTTP_OK
 
-            # Call the search_cve tool
             resp = client.post(
-                "/mcp/",
+                "/",
                 json=_tool_call("search_cve", {"cve_id": "CVE-2023-44487"}),
             )
             assert resp.status_code == HTTP_OK
@@ -63,17 +68,16 @@ class TestMCPSearchCVE:
             assert content["cves"][0]["id"] == "CVE-2023-44487"
 
     def test_search_cve_no_filters_returns_error(self) -> None:
-        with TestClient(app) as client:
-            init_resp = client.post("/mcp/", json=_init_request())
+        with TestClient(_app) as client:
+            init_resp = client.post("/", json=_init_request())
             assert init_resp.status_code == HTTP_OK
 
             resp = client.post(
-                "/mcp/",
+                "/",
                 json=_tool_call("search_cve", {}),
             )
             assert resp.status_code == HTTP_OK
             data = resp.json()
-            # Validation error — should be an error response
             assert "error" in data
 
 
@@ -83,12 +87,12 @@ class TestMCPSearchCPE:
         fake_search_cpe: SearchCPECapture,  # noqa: ARG002
         mock_search_cpe: Mock,
     ) -> None:
-        with with_mock(mock_search_cpe), TestClient(app) as client:
-            init_resp = client.post("/mcp/", json=_init_request())
+        with with_mock(mock_search_cpe), TestClient(_app) as client:
+            init_resp = client.post("/", json=_init_request())
             assert init_resp.status_code == HTTP_OK
 
             resp = client.post(
-                "/mcp/",
+                "/",
                 json=_tool_call(
                     "search_cpe",
                     {"product": "curl", "version": "8.4.0"},

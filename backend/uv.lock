@@ -3,6 +3,25 @@ revision = 1
 requires-python = "==3.13.*"
 
 [[package]]
+name = "ada-url"
+version = "1.31.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "cffi" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/c8/42/1415cdfd67be2afdbed507ac8f29484c40478ac710a4cba88ae67bc0e7d9/ada_url-1.31.0.tar.gz", hash = "sha256:c32ed731ac33d4b1a363109fd37d37efcfa4c509357372ada70c526dbe3d8609", size = 272395 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/cb/9f/706581617abca3fc2226b5a954423944d89d892d7228a80529b79c78ecde/ada_url-1.31.0-cp313-cp313-macosx_10_15_universal2.whl", hash = "sha256:e09c3b51ba6285d562f5e546b0ff93d7c9bc882359fa94fde1bbef1ee0fa3dc7", size = 718617 },
+    { url = "https://files.pythonhosted.org/packages/4f/d7/1b30027ae42cd20fa3932d3fa83e67c7af2b8744966dcebbc5c7bf717df2/ada_url-1.31.0-cp313-cp313-macosx_10_15_x86_64.whl", hash = "sha256:f4577db383604ab980b2a18c751e7d85a54c73fd1ba6f10f0aef032bebb89da0", size = 496754 },
+    { url = "https://files.pythonhosted.org/packages/07/05/c9cd28a937e08ac6a2b7148408e94d14f7bfa8c9b4bf6b70ba7b20daff98/ada_url-1.31.0-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:92e8f03f6a7426030951236f2b8e3711e8d07a2561c30fe25e657d2f672949b8", size = 493285 },
+    { url = "https://files.pythonhosted.org/packages/11/13/605b56a3e84e6b0ae77d7a2613450319f25f4bb24a0c2253611cfd4f6d39/ada_url-1.31.0-cp313-cp313-manylinux_2_24_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:923ac65be2c1bdff55fbfc5395cc8bc0e971b1fd59fd84979181c32ba6b458f4", size = 1753557 },
+    { url = "https://files.pythonhosted.org/packages/d4/9a/512fae1724244ebbd73c38495942b26b240a0fa305a2db687d789d1734b4/ada_url-1.31.0-cp313-cp313-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:4657b1882700b051d5f97bd36fe88a07f4fef20fa0631f0d24ed09dc05b1f340", size = 1789317 },
+    { url = "https://files.pythonhosted.org/packages/cd/f8/f9df02d57658e444a99b12f3a420481a5162caa911eed4908480b974754d/ada_url-1.31.0-cp313-cp313-musllinux_1_2_aarch64.whl", hash = "sha256:d756b12d39a4b51660b5771c4bfbf148b04551061cbb6c505c5393c57d058912", size = 2693882 },
+    { url = "https://files.pythonhosted.org/packages/bf/44/41fe5ef398030584f0c92f786d8280dbf5f4b4022ffd84bb61d5c899b735/ada_url-1.31.0-cp313-cp313-musllinux_1_2_x86_64.whl", hash = "sha256:3ed846f79013ccb853ef97b4cf021da4e7c7a13dc11cc09fb789f60ec9af15cd", size = 2806657 },
+    { url = "https://files.pythonhosted.org/packages/1f/8f/e56f077ed4f4ccd70f83298d232aa3e2dfb00a32b5bcc3a7f69f81ed4668/ada_url-1.31.0-cp313-cp313-win_amd64.whl", hash = "sha256:d0be13a0a971db79317eb50799d65dd1b0bf993289f3f6dc99e72e980e1aef4a", size = 450317 },
+]
+
+[[package]]
 name = "ag-ui-protocol"
 version = "0.1.10"
 source = { registry = "https://pypi.org/simple" }
@@ -168,6 +187,21 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/6b/5c/685e6633917e101e5dcb62b9dd76946cbb57c26e133bae9e0cd36033c0a9/attrs-25.4.0.tar.gz", hash = "sha256:16d5969b87f0859ef33a48b35d55ac1be6e42ae49d5e853b597db70c35c57e11", size = 934251 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/3a/2a/7cc015f5b9f5db42b7d48157e23356022889fc354a2813c15934b7cb5c0e/attrs-25.4.0-py3-none-any.whl", hash = "sha256:adcf7e2a1fb3b36ac48d97835bb6d8ade15b8dcce26aba8bf1d14847b57a3373", size = 67615 },
+]
+
+[[package]]
+name = "auth0-api-python"
+version = "1.0.0b7"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "ada-url" },
+    { name = "authlib" },
+    { name = "httpx" },
+    { name = "requests" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/3b/90/f3dc4d6be5dfc027241a7b6168197e3f4ab1e7b73eb0739e5dfb144539a3/auth0_api_python-1.0.0b7.tar.gz", hash = "sha256:7ee1571939de8e7dea59ba8f510137c9b4f01f5b09c797da7d9c057a40939629", size = 24359 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/12/92/6af639f8dafa4503e7496e0dda9e33a55885740c7b88496c5a750a6a7ef8/auth0_api_python-1.0.0b7-py3-none-any.whl", hash = "sha256:1b3035e49c580b9757792bc55b8dfd169df30af05b88b648c5c6c219703f494c", size = 23149 },
 ]
 
 [[package]]
@@ -777,16 +811,16 @@ wheels = [
 
 [[package]]
 name = "http-mcp"
-version = "0.11.2"
+version = "0.12.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pydantic" },
     { name = "starlette" },
     { name = "uvicorn" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/69/5e/27f2826f45ae94484e6cc4d634a0994c303a3e4da47f941e563ecbaf9dd7/http_mcp-0.11.2.tar.gz", hash = "sha256:bbeec9f01555c52513b0bc098e7e3914922a18773158f85f6a68a79bba5e7619", size = 547757 }
+sdist = { url = "https://files.pythonhosted.org/packages/e5/dc/a417e30618a609a79e5a9848cefbccfb0d6777c41a77d4836d8d139be294/http_mcp-0.12.0.tar.gz", hash = "sha256:b55fa450b2d445555bf4eb3b4fe83f548ddb2a5d76efd0d53a52d29b59736ad0", size = 548611 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/52/be/6e11e6d619061e58d0ae6ad41992024f24a8d446f82b9c5322345128e404/http_mcp-0.11.2-py3-none-any.whl", hash = "sha256:2e1a5fb3f1eb3b8068dbc3ef60a487b5e1b525fd963fe9ec8c8f93da9b0a4b8d", size = 50159 },
+    { url = "https://files.pythonhosted.org/packages/7b/4c/3586c3cdb5608875d01687975f57e866569f6f0fa09a39c1174cf2a4d0e2/http_mcp-0.12.0-py3-none-any.whl", hash = "sha256:c982508e7619d562fdf793aeaa6114ef4d687f3fa7dfb44bc4aed1a25d67678a", size = 50128 },
 ]
 
 [[package]]
@@ -2274,6 +2308,7 @@ name = "test-http-mcp"
 version = "0.0.1"
 source = { editable = "." }
 dependencies = [
+    { name = "auth0-api-python" },
     { name = "fastapi" },
     { name = "http-mcp" },
     { name = "logfire", extra = ["fastapi", "sqlite3"] },
@@ -2299,8 +2334,9 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "auth0-api-python", specifier = ">=1.0.0b6" },
     { name = "fastapi", specifier = "==0.135.3" },
-    { name = "http-mcp", specifier = "==0.11.2" },
+    { name = "http-mcp", extras = ["auth"], specifier = "==0.12.0" },
     { name = "logfire", extras = ["fastapi", "sqlite3"], specifier = "==4.16.0" },
     { name = "mcp", specifier = ">=1.23.0" },
     { name = "nvdlib", specifier = "==0.8.3" },
