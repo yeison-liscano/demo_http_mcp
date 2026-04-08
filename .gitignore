@@ -1,6 +1,8 @@
 # Backend
 backend/.venv/
 backend/.env
+backend/.env.auth0
+backend/.env*.local
 backend/.ruff_cache/
 backend/.mypy_cache/
 backend/Fluid-Attacks-Results.csv
@@ -16,6 +18,9 @@ frontend/dist/
 .vscode/
 .cursor/
 .gemini/
+
+# Claude Code
+.claude/agent-memory/
 
 # OS
 .npm

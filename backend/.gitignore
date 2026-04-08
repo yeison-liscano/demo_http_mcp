@@ -1,0 +1,5 @@
+# Auth0 credentials
+.env.auth0
+
+# Auth0 credentials
+.env

@@ -1,6 +1,6 @@
 import type { TextEvent as AppTextEvent, StreamEvent } from "./types";
 
-const API_BASE = "/api";
+const API_BASE = "/api/api";
 
 export async function fetchChatHistory(): Promise<StreamEvent[]> {
   const response = await fetch(`${API_BASE}/chat/`);
@@ -71,7 +71,9 @@ export async function sendChatMessage(
         case "thinking":
           if (activeThinkingIdx >= 0) {
             // Append to current thinking block
-            const prev = middleEvents[activeThinkingIdx] as import("./types").ThinkingEvent;
+            const prev = middleEvents[
+              activeThinkingIdx
+            ] as import("./types").ThinkingEvent;
             prev.content += chunk.content;
           } else {
             // Start a new thinking block

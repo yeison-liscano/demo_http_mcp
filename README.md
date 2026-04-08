@@ -22,6 +22,9 @@ test-http-mcp/
 │   │   ├── main.py          # Entry points (HTTP / stdio)
 │   │   ├── agen_memory.py   # SQLite message persistence
 │   │   ├── config.py        # Settings via pydantic-settings
+│   │   ├── auth0/           # Auth0 integration
+│   │   │   ├── __init__.py  # JWT token validator
+│   │   │   └── client_store.py # Dynamic client registration (RFC 7591)
 │   │   ├── tools/           # MCP tools (CPE/CVE search via NVD)
 │   │   └── prompts/         # MCP prompt templates
 │   ├── pyproject.toml       # Python deps & scripts
@@ -42,6 +45,38 @@ test-http-mcp/
 ├── LICENSE
 └── README.md
 ```
+
+### Authentication (Auth0)
+
+The MCP endpoint (`/mcp/`) is protected with Auth0 OAuth2 authentication.
+Tools require scopes (`tool:search_cpe`, `tool:search_cve`) to be present in
+the access token.
+
+#### Required environment variables
+
+| Variable | Description |
+|----------|-------------|
+| `AUTH0_DOMAIN` | Auth0 tenant domain (e.g. `your-tenant.auth0.com`) |
+| `AUTH0_AUDIENCE` | API identifier for token validation |
+| `AUTH0_MCP_APP_CLIENT_ID` | Auth0 application client ID for the MCP app |
+| `AUTH0_MGMT_CLIENT_ID` | Management API client ID (for dynamic registration) |
+| `AUTH0_MGMT_CLIENT_SECRET` | Management API client secret |
+| `AUTH0_ENABLED` | Set to `false` to disable scope enforcement (default: `true`) |
+
+Place these in `backend/.env` (git-ignored).
+
+#### App mount structure
+
+| Path | App | Auth |
+|------|-----|------|
+| `/mcp/` | Protected MCP server | Auth0 Bearer token required |
+| `/register` | Dynamic client registration (RFC 7591) | Unauthenticated |
+| `/.well-known/` | OAuth/resource metadata | Unauthenticated |
+| `/api/chat/` | Chat interface endpoints | Unauthenticated (see note) |
+| `/api/` | Frontend static files | Unauthenticated |
+
+> **Note:** The chat endpoints are intentionally unauthenticated for local
+> development. Add authentication before exposing beyond localhost.
 
 ### Requirements
 
@@ -109,6 +144,11 @@ cd backend && uv run run-app
 
 ### Use with Cursor or other MCP clients
 
+With Auth0 enabled, clients must obtain an OAuth2 access token. The server
+supports [RFC 7591 Dynamic Client Registration](https://datatracker.ietf.org/doc/html/rfc7591)
+at `/register`, so MCP clients that implement the auth spec will register
+automatically.
+
 Example `.cursor/mcp.json` for HTTP mode:
 
 ```json
@@ -116,10 +156,7 @@ Example `.cursor/mcp.json` for HTTP mode:
   "mcpServers": {
     "test-http-mcp": {
       "type": "http",
-      "url": "http://localhost:8000/mcp/",
-      "headers": {
-        "Authorization": "Bearer $TEST_TOKEN"
-      }
+      "url": "http://localhost:8000/mcp/"
     }
   }
 }
@@ -132,10 +169,7 @@ Usage with `Gemini`:
   "mcpServers": {
     "test": {
       "httpUrl": "http://localhost:8000/mcp/",
-      "timeout": 5000,
-      "headers": {
-        "Authorization": "Bearer TEST_TOKEN"
-      }
+      "timeout": 5000
     }
   }
 }
@@ -194,15 +228,20 @@ npx tsc --noEmit              # type check
 
 ### Implementation notes
 
-- The FastAPI app is defined in `backend/app/app.py` and mounts
-  `http_mcp.server.MCPServer` at `/mcp`.
-- The chat interface uses `pydantic-ai` with a Gemini agent that can call
+- The root ASGI app is an Auth0-protected MCP app created by `auth_mcp`,
+  which mounts the FastAPI sub-app at `/api`.
+- The MCP endpoint at `/mcp/` requires a valid Auth0 Bearer token with
+  the appropriate tool scopes.
+- Dynamic client registration at `/register` proxies to a pre-created
+  Auth0 application, updating its allowed callback URLs. Redirect URIs
+  are validated (HTTPS required; HTTP allowed only for localhost).
+- The chat interface uses `pydantic-ai` with an Ollama agent that can call
   MCP tools to search for vulnerabilities.
 - Chat history is persisted in a local SQLite database via `agen_memory.py`.
 - The React frontend streams responses as newline-delimited JSON and renders
   markdown with the `marked` library.
 - In production, the backend serves the built frontend from `frontend/dist/`
-  with SPA fallback routing.
+  with SPA fallback routing (path traversal protected).
 - In development, Vite proxies `/api/*` requests to the backend on port 8000.
 
 ### License

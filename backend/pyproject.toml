@@ -17,12 +17,13 @@ dependencies = [
     "pydantic==2.12.5",
     "uvicorn==0.41.0",
     "starlette==0.52.1",
-    "http-mcp==0.11.2",
+    "http-mcp[auth]==0.12.0",
     "fastapi==0.135.3",
     "logfire[fastapi,sqlite3]==4.16.0",
     "pydantic-ai==1.77.0",
     "nvdlib==0.8.3",
     "mcp>=1.23.0",
+    "auth0-api-python>=1.0.0b6",
 ]
 
 [dependency-groups]
