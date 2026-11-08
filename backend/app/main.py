@@ -3,7 +3,6 @@ import asyncio
 import uvicorn
 from http_mcp.server import MCPServer
 
-from app.prompts import PROMPTS
 from app.tools import TOOLS
 
 
@@ -16,5 +15,5 @@ def run_http() -> None:
 
 def run_stdio() -> None:
     """Serve the MCP server over stdio (no authentication, tools unscoped)."""
-    stdio_server = MCPServer(tools=TOOLS, prompts=PROMPTS, name="test", version="1.0.0")
+    stdio_server = MCPServer(tools=TOOLS, name="test", version="1.0.0")
     asyncio.run(stdio_server.serve_stdio())

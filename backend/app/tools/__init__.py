@@ -1,35 +1,34 @@
-from http_mcp.types import Tool
+from http_mcp.types import Tool, ToolAnnotations
 
-from app.tools.models import (
-    SearchCPEInput,
-    SearchCPEOutput,
-    SearchCVEInput,
-    SearchCVEOutput,
-)
-from app.tools.nvd_dal import search_cpe, search_cve
+from app.tools.web import WebFetchInput, WebSearchInput, WebToolOutput, web_fetch, web_search
+
+# Read-only, but they reach the open web and a model, so results vary between calls.
+_WEB = ToolAnnotations(read_only_hint=True, idempotent_hint=False, open_world_hint=True)
 
 
 def create_tools(*, auth_enabled: bool = False) -> tuple[Tool, ...]:
     """Create tool definitions, optionally with Auth0 scope enforcement."""
-    cpe_scopes = ("tool:search_cpe",) if auth_enabled else ()
-    cve_scopes = ("tool:search_cve",) if auth_enabled else ()
+    search_scopes = ("tool:web_search",) if auth_enabled else ()
+    fetch_scopes = ("tool:web_fetch",) if auth_enabled else ()
     return (
         Tool(
-            inputs=SearchCPEInput,
-            output=SearchCPEOutput,
-            func=search_cpe,
-            scopes=cpe_scopes,
+            inputs=WebSearchInput,
+            output=WebToolOutput,
+            func=web_search,
+            scopes=search_scopes,
+            annotations=_WEB,
         ),
         Tool(
-            inputs=SearchCVEInput,
-            output=SearchCVEOutput,
-            func=search_cve,
-            scopes=cve_scopes,
+            inputs=WebFetchInput,
+            output=WebToolOutput,
+            func=web_fetch,
+            scopes=fetch_scopes,
+            annotations=_WEB,
         ),
     )
 
 
-# Backward-compatible default (no auth)
+# Default without scopes, for stdio and the unauthenticated tests.
 TOOLS = create_tools(auth_enabled=False)
 
 __all__ = ["TOOLS", "create_tools"]
