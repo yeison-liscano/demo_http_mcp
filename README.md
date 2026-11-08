@@ -81,8 +81,39 @@ Place these in `backend/.env` (git-ignored).
 ### Requirements
 
 - Python 3.13
-- Node.js 18+ and npm
+- Node.js 20.19+ and npm
 - `uv` (recommended) or `pip`
+
+Alternatively, [Nix](https://nixos.org) supplies all of the above — see
+[Nix dev shell](#nix-dev-shell).
+
+### Nix dev shell
+
+`flake.nix` pins the whole toolchain (Python 3.13, `uv`, Node.js 24, `git`,
+`sqlite`), so nothing needs to be installed system-wide:
+
+```bash
+nix develop
+```
+
+With [direnv](https://direnv.net) the shell loads automatically on `cd`, and
+also syncs `backend/.venv`:
+
+```bash
+direnv allow
+```
+
+Library dependencies stay owned by their own lock files — `backend/uv.lock` and
+`frontend/package-lock.json` — so pinned tool versions (ruff, mypy, pytest)
+come from `uv`, not from Nix. Inside the shell `uv` is pinned to the Nix
+interpreter (`UV_PYTHON`, `UV_PYTHON_DOWNLOADS=never`) so it never downloads a
+second Python.
+
+To bump the pinned nixpkgs revision:
+
+```bash
+nix flake update
+```
 
 ### Install
 
