@@ -24,8 +24,9 @@ mcp_server = MCPServer(
     version="1.0.0",
 )
 
-# http-mcp >= 0.19 only accepts HTTPS issuers in `authorization_servers` and HTTPS
-# endpoints in authorization server metadata, and MCP clients on SDK 2.x require the
+# http-mcp >= 0.19 accepts only HTTPS issuers in `authorization_servers` and HTTPS
+# endpoints in authorization server metadata (rc2 adds a loopback-HTTP opt-in for
+# local authorization servers, which Auth0 is not), and MCP clients on SDK 2.x require the
 # metadata `issuer` to equal the advertised server (RFC 8414 section 3.3). Auth0 is
 # therefore advertised directly; client registration is up to the Auth0 tenant.
 app = create_protected_mcp_app(

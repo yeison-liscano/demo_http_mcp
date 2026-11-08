@@ -183,8 +183,7 @@ class SearchCPEInput(BaseModel):
     def validate_version(cls, version: str) -> str:
         if len(version) < MIN_LENGTH or len(version) > MAX_VERSION_LENGTH:
             message = (
-                f"Version must be between {MIN_LENGTH} and {MAX_VERSION_LENGTH} "
-                "characters long"
+                f"Version must be between {MIN_LENGTH} and {MAX_VERSION_LENGTH} characters long"
             )
             raise ValueError(message)
         if not re.match(r"^[0-9]+\.[0-9]+\.[0-9]+$", version):
