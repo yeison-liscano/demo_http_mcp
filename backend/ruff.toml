@@ -14,6 +14,7 @@ ignore = [
     "D104",
     "D107",
     "EM101",
+    "CPY001", # licensed via the repository LICENSE file, not per-file headers
 ]
 fixable = ["ALL"]
 unfixable = []

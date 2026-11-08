@@ -1,12 +1,9 @@
 ## test-http-mcp
 
 Demo Model Context Protocol (MCP) server implemented in Python using the
-`http-mcp` package. It can run over HTTP (Starlette/Uvicorn) or over stdio,
-exposing example Tools and Prompts to any MCP-capable client. The project
-includes a React frontend that provides a chat interface for querying
-vulnerabilities via the NVD (National Vulnerability Database).
-
-[![Chat UI](https://img.youtube.com/vi/BzrVV2y8g1Q/0.jpg)](https://youtube.com/shorts/BzrVV2y8g1Q)
+`http-mcp` package. It can run over HTTP (Starlette/Uvicorn, protected with
+Auth0) or over stdio, exposing tools and prompts that query the NVD (National
+Vulnerability Database) to any MCP-capable client.
 
 <a href="https://glama.ai/mcp/servers/@yeison-liscano/demo_http_mcp">
   <img width="380" height="200" src="https://glama.ai/mcp/servers/@yeison-liscano/demo_http_mcp/badge" alt="Demo HTTP Server MCP server" />
@@ -16,81 +13,77 @@ vulnerabilities via the NVD (National Vulnerability Database).
 
 ```
 test-http-mcp/
-├── backend/                 # Python backend (FastAPI + MCP server)
+├── backend/                 # Python MCP server
 │   ├── app/                 # Application source code
-│   │   ├── app.py           # FastAPI app, routes, MCP mount
+│   │   ├── app.py           # Auth0-protected HTTP app (auth_mcp)
 │   │   ├── main.py          # Entry points (HTTP / stdio)
-│   │   ├── agen_memory.py   # SQLite message persistence
 │   │   ├── config.py        # Settings via pydantic-settings
 │   │   ├── auth0/           # Auth0 integration
 │   │   │   ├── __init__.py  # JWT token validator
-│   │   │   └── client_store.py # Dynamic client registration (RFC 7591)
+│   │   │   └── client_store.py # Dynamic client registration (RFC 7591, not mounted)
 │   │   ├── tools/           # MCP tools (CPE/CVE search via NVD)
 │   │   └── prompts/         # MCP prompt templates
+│   ├── tests/               # pytest suite, incl. end-to-end MCP client tests
 │   ├── pyproject.toml       # Python deps & scripts
 │   ├── uv.lock              # Locked dependencies
 │   ├── ruff.toml            # Linter config
 │   ├── mypy.ini             # Type-checker config
 │   └── .envrc               # direnv auto-activation
-├── frontend/                # React + TypeScript frontend (Vite)
-│   ├── src/
-│   │   ├── components/      # ChatApp, ChatInput, MessageList, MessageBubble
-│   │   ├── api.ts           # API client (fetch history, stream messages)
-│   │   ├── types.ts         # Shared TypeScript types
-│   │   ├── App.tsx          # Root component
-│   │   └── App.css          # Styles
-│   ├── vite.config.ts       # Vite config with dev proxy
-│   └── package.json         # Node dependencies
+├── flake.nix                # Nix dev shell
 ├── AGENTS.md
 ├── LICENSE
 └── README.md
 ```
 
-### Authentication (Auth0)
+### Protocol
 
-The MCP endpoint (`/mcp/`) is protected with Auth0 OAuth2 authentication.
+The server speaks only MCP protocol revision `2026-07-28` (http-mcp >= 0.17).
+There is no `initialize` handshake, so clients must use an MCP SDK that supports
+that revision, for example the Python `mcp` SDK >= 2.x or FastMCP 4.
+
+### Authentication (Auth0, HTTP only)
+
+The HTTP endpoint (`/mcp/`) is protected with Auth0 OAuth2 authentication.
 Tools require scopes (`tool:search_cpe`, `tool:search_cve`) to be present in
-the access token.
+the access token. stdio mode has no authentication and no tool scopes.
 
 #### Required environment variables
 
 | Variable | Description |
 |----------|-------------|
 | `AUTH0_DOMAIN` | Auth0 tenant domain (e.g. `your-tenant.auth0.com`) |
-| `AUTH0_AUDIENCE` | API identifier for token validation |
-| `AUTH0_MCP_APP_CLIENT_ID` | Auth0 application client ID for the MCP app |
-| `AUTH0_MGMT_CLIENT_ID` | Management API client ID (for dynamic registration) |
-| `AUTH0_MGMT_CLIENT_SECRET` | Management API client secret |
+| `AUTH0_AUDIENCE` | Auth0 API identifier. **Must be the MCP resource URI** (`http://localhost:8000/mcp/`): tokens whose audience names another resource are rejected (RFC 8707) |
+| `AUTH0_MCP_APP_CLIENT_ID` | Auth0 application client ID for the MCP app (used by `Auth0ClientStore`, currently not mounted) |
+| `AUTH0_MGMT_CLIENT_ID` | Management API client ID (used by `Auth0ClientStore`, currently not mounted) |
+| `AUTH0_MGMT_CLIENT_SECRET` | Management API client secret (used by `Auth0ClientStore`, currently not mounted) |
 | `AUTH0_ENABLED` | Set to `false` to disable scope enforcement (default: `true`) |
 
 Place these in `backend/.env` (git-ignored).
 
-#### App mount structure
+#### HTTP routes
 
-| Path | App | Auth |
-|------|-----|------|
-| `/mcp/` | Protected MCP server | Auth0 Bearer token required |
-| `/register` | Dynamic client registration (RFC 7591) | Unauthenticated |
-| `/.well-known/` | OAuth/resource metadata | Unauthenticated |
-| `/api/chat/` | Chat interface endpoints | Unauthenticated (see note) |
-| `/api/` | Frontend static files | Unauthenticated |
+| Path | Purpose | Auth |
+|------|---------|------|
+| `/mcp/` | MCP server (Streamable HTTP) | Auth0 Bearer token required |
+| `/.well-known/oauth-protected-resource/mcp/` | Protected resource metadata (RFC 9728), names Auth0 as the authorization server | Unauthenticated |
 
-> **Note:** The chat endpoints are intentionally unauthenticated for local
-> development. Add authentication before exposing beyond localhost.
+Clients discover Auth0's endpoints from the tenant itself, so client
+registration depends on the tenant: enable Dynamic Client Registration in
+Auth0, or configure the client with a pre-registered client ID.
 
 ### Requirements
 
 - Python 3.13
-- Node.js 20.19+ and npm
 - `uv` (recommended) or `pip`
+- Node.js (optional): only for `npx`-based MCP clients and servers
 
 Alternatively, [Nix](https://nixos.org) supplies all of the above — see
 [Nix dev shell](#nix-dev-shell).
 
 ### Nix dev shell
 
-`flake.nix` pins the whole toolchain (Python 3.13, `uv`, Node.js 24, `git`,
-`sqlite`), so nothing needs to be installed system-wide:
+`flake.nix` pins the whole toolchain (Python 3.13, `uv`, Node.js 24, `git`),
+so nothing needs to be installed system-wide:
 
 ```bash
 nix develop
@@ -103,11 +96,10 @@ also syncs `backend/.venv`:
 direnv allow
 ```
 
-Library dependencies stay owned by their own lock files — `backend/uv.lock` and
-`frontend/package-lock.json` — so pinned tool versions (ruff, mypy, pytest)
-come from `uv`, not from Nix. Inside the shell `uv` is pinned to the Nix
-interpreter (`UV_PYTHON`, `UV_PYTHON_DOWNLOADS=never`) so it never downloads a
-second Python.
+Library dependencies stay owned by `backend/uv.lock`, so pinned tool versions
+(ruff, mypy, pytest) come from `uv`, not from Nix. Inside the shell `uv` is
+pinned to the Nix interpreter (`UV_PYTHON`, `UV_PYTHON_DOWNLOADS=never`) so it
+never downloads a second Python.
 
 To bump the pinned nixpkgs revision:
 
@@ -117,14 +109,14 @@ nix flake update
 
 ### Install
 
-Backend (using `uv`):
+Using `uv`:
 
 ```bash
 cd backend
-uv run python -V            # creates a venv and syncs deps from pyproject
+uv sync
 ```
 
-Backend (using `pip`):
+Using `pip`:
 
 ```bash
 cd backend
@@ -133,52 +125,49 @@ source .venv/bin/activate
 pip install .
 ```
 
-Frontend:
-
-```bash
-cd frontend
-npm install
-```
-
 ### Run
 
-#### Development (frontend + backend separately)
-
-Start the backend:
+HTTP (needs the Auth0 variables above):
 
 ```bash
 cd backend
-uv run run-app
-# → API on http://localhost:8000
-# → MCP endpoint on http://localhost:8000/mcp/
+uv run run-app          # → MCP endpoint on http://localhost:8000/mcp/
+uv run run-app-local    # same, with auto-reload
 ```
 
-Start the frontend dev server (in a separate terminal):
+stdio (no Auth0 configuration needed):
 
 ```bash
-cd frontend
-npm run dev
-# → UI on http://localhost:5173 (proxies /api/* → backend)
+cd backend
+uv run run-stdio
 ```
 
-#### Production (backend serves the built frontend)
+### Test with an MCP client
 
-Build the frontend and start the backend:
+With the Python `mcp` SDK (installed in the dev group):
 
-```bash
-cd frontend && npm run build && cd ..
-cd backend && uv run run-app
-# → Everything on http://localhost:8000
+```python
+import asyncio
+
+import httpx2
+from mcp import Client, StdioServerParameters
+from mcp.client.streamable_http import streamable_http_client
+
+
+async def main() -> None:
+    # stdio: the client launches the server as a subprocess
+    stdio = StdioServerParameters(command="uv", args=["run", "--project", "backend", "run-stdio"])
+    async with Client(stdio) as client:
+        print(await client.list_tools())
+
+    # HTTP: pass an Auth0 access token for this API (audience = the MCP resource URI)
+    http_client = httpx2.AsyncClient(headers={"Authorization": "Bearer <access-token>"})
+    async with Client(streamable_http_client("http://localhost:8000/mcp/", http_client=http_client)) as client:
+        print(await client.call_tool("search_cve", {"cve_id": "CVE-2023-44487"}))
+
+
+asyncio.run(main())
 ```
-
-### Run (stdio mode)
-
-### Use with Cursor or other MCP clients
-
-With Auth0 enabled, clients must obtain an OAuth2 access token. The server
-supports [RFC 7591 Dynamic Client Registration](https://datatracker.ietf.org/doc/html/rfc7591)
-at `/register`, so MCP clients that implement the auth spec will register
-automatically.
 
 Example `.cursor/mcp.json` for HTTP mode:
 
@@ -213,8 +202,7 @@ Example `.cursor/mcp.json` entry to connect via stdio:
   "mcpServers": {
     "test_studio": {
       "command": "uv",
-      "args": ["run", "--project", "backend", "run-stdio"],
-      "env": { "AUTHORIZATION_TOKEN": "Bearer TEST_TOKEN" }
+      "args": ["run", "--project", "backend", "run-stdio"]
     }
   }
 }
@@ -224,18 +212,19 @@ Example `.cursor/mcp.json` entry to connect via stdio:
 
 - Tools (see `backend/app/tools/`):
   - `search_cpe(product, version, vendor)` — search Common Platform Enumerations via NVD
-  - `search_cve(cpe_name)` — search Common Vulnerabilities and Exposures for a given CPE
+  - `search_cve(cve_id, cpe_name, keyword_search, cwe_id, cvss_v3_severity, has_kev, no_rejected, pub_start_date, pub_end_date)`
+    — search Common Vulnerabilities and Exposures; at least one filter is required
 - Prompts (see `backend/app/prompts/`):
-  - `sync_nvd_search(dependency, version)` — simple vulnerability search prompt
-  - `async_nvd_search(dependency, version)` — advanced prompt with pre-fetched CVE data
+  - `sync_nvd_search(dependency_name, dependency_version)` — simple vulnerability search prompt
+  - `async_nvd_search(dependency_name, dependency_version)` — prompt with pre-fetched CVE data
 
 ### Project scripts
 
-Two console entry points are defined in `backend/pyproject.toml`:
+Three console entry points are defined in `backend/pyproject.toml`:
 
-- `run-app` → `app.main:run_http`
+- `run-app` → `app.main:run_http` (HTTP on `localhost:8000`)
+- `run-app-local` → `app.app:main` (HTTP with auto-reload)
 - `run-stdio` → `app.main:run_stdio`
-- `run-app-local` → `app.app:main` (with auto-reload)
 
 ### Development
 
@@ -248,32 +237,22 @@ uv run pytest                 # tests
 uv run mdformat .             # format markdown
 ```
 
-Frontend tasks (run from the `frontend/` directory):
-
-```bash
-npm run dev                   # start dev server
-npm run build                 # production build
-npm run lint                  # lint with ESLint
-npx tsc --noEmit              # type check
-```
+`tests/test_mcp_client_compat.py` drives the server with the real `mcp` SDK
+client over HTTP (plain and Auth0-protected) and over stdio (`run-stdio`), so it
+catches protocol drift between `http-mcp` and MCP clients.
 
 ### Implementation notes
 
-- The root ASGI app is an Auth0-protected MCP app created by `auth_mcp`,
-  which mounts the FastAPI sub-app at `/api`.
-- The MCP endpoint at `/mcp/` requires a valid Auth0 Bearer token with
-  the appropriate tool scopes.
-- Dynamic client registration at `/register` proxies to a pre-created
-  Auth0 application, updating its allowed callback URLs. Redirect URIs
-  are validated (HTTPS required; HTTP allowed only for localhost).
-- The chat interface uses `pydantic-ai` with an Ollama agent that can call
-  MCP tools to search for vulnerabilities.
-- Chat history is persisted in a local SQLite database via `agen_memory.py`.
-- The React frontend streams responses as newline-delimited JSON and renders
-  markdown with the `marked` library.
-- In production, the backend serves the built frontend from `frontend/dist/`
-  with SPA fallback routing (path traversal protected).
-- In development, Vite proxies `/api/*` requests to the backend on port 8000.
+- The HTTP app is an Auth0-protected MCP app created by `auth_mcp`; the MCP
+  endpoint at `/mcp/` requires a valid Auth0 Bearer token with the
+  appropriate tool scopes.
+- `Auth0ClientStore` (dynamic client registration proxied to a pre-created
+  Auth0 application) is kept but not mounted: http-mcp >= 0.19 only accepts
+  HTTPS authorization servers and endpoints, and MCP clients on SDK 2.x require
+  the metadata `issuer` to match the advertised server, which a localhost proxy
+  for Auth0 cannot satisfy.
+- Only loopback browser origins are accepted on `/mcp/` (http-mcp's DNS
+  rebinding defence); clients that send no `Origin` header are unaffected.
 
 ### License
 

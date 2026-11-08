@@ -8,10 +8,6 @@ class Config(BaseSettings):
         extra="ignore",
     )
 
-    logfire_api_key: str = ""
-    logfire_project_id: str = ""
-    logfire_api_url: str = ""
-
     auth0_domain: str = ""
     auth0_audience: str = ""
     auth0_enabled: bool = True
