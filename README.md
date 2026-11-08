@@ -2,8 +2,10 @@
 
 Demo Model Context Protocol (MCP) server implemented in Python using the
 `http-mcp` package. It can run over HTTP (Starlette/Uvicorn, protected with
-Auth0) or over stdio, exposing tools and prompts that query the NVD (National
-Vulnerability Database) to any MCP-capable client.
+Auth0) or over stdio, exposing two web tools, `web_search` and `web_fetch`, to
+any MCP-capable client. Each tool runs a Claude sub-agent built with
+[pydantic-ai](https://pydantic.dev/docs/ai/) that checks every web result for
+prompt injection before reading it.
 
 <a href="https://glama.ai/mcp/servers/@yeison-liscano/demo_http_mcp">
   <img width="380" height="200" src="https://glama.ai/mcp/servers/@yeison-liscano/demo_http_mcp/badge" alt="Demo HTTP Server MCP server" />
@@ -18,11 +20,11 @@ test-http-mcp/
 │   │   ├── app.py           # Auth0-protected HTTP app (auth_mcp)
 │   │   ├── main.py          # Entry points (HTTP / stdio)
 │   │   ├── config.py        # Settings via pydantic-settings
+│   │   ├── agents.py        # Claude sub-agents (pydantic-ai) behind the web tools
 │   │   ├── auth0/           # Auth0 integration
 │   │   │   ├── __init__.py  # JWT token validator
 │   │   │   └── client_store.py # Dynamic client registration (RFC 7591, not mounted)
-│   │   ├── tools/           # MCP tools (CPE/CVE search via NVD)
-│   │   └── prompts/         # MCP prompt templates
+│   │   └── tools/           # MCP tools (web_search, web_fetch)
 │   ├── tests/               # pytest suite, incl. end-to-end MCP client tests
 │   ├── pyproject.toml       # Python deps & scripts
 │   ├── uv.lock              # Locked dependencies
@@ -44,8 +46,9 @@ that revision, for example the Python `mcp` SDK >= 2.x or FastMCP 4.
 ### Authentication (Auth0, HTTP only)
 
 The HTTP endpoint (`/mcp/`) is protected with Auth0 OAuth2 authentication.
-Tools require scopes (`tool:search_cpe`, `tool:search_cve`) to be present in
-the access token. stdio mode has no authentication and no tool scopes.
+Tools require scopes (`tool:web_search`, `tool:web_fetch`) to be present in
+the access token; define both as permissions on the Auth0 API. stdio mode has no
+authentication and no tool scopes.
 
 #### Required environment variables
 
@@ -59,6 +62,24 @@ the access token. stdio mode has no authentication and no tool scopes.
 | `AUTH0_ENABLED` | Set to `false` to disable scope enforcement (default: `true`) |
 
 Place these in `backend/.env` (git-ignored).
+
+### Claude sub-agents (HTTP and stdio)
+
+Both tools call Claude through the Anthropic API, so the server needs Anthropic
+credentials. Set `ANTHROPIC_API_KEY` in `backend/.env` or the environment, or
+sign in once with `ant auth login`: without a key, the Anthropic SDK uses that
+profile (or `ANTHROPIC_AUTH_TOKEN`). The server starts without credentials; a
+tool call then fails with "the server has no Anthropic credentials configured".
+
+| Variable | Description |
+|----------|-------------|
+| `ANTHROPIC_API_KEY` | Anthropic API key (optional, see above) |
+| `AGENT_MODEL` | Claude model for both sub-agents (default: `claude-opus-5-5`) |
+| `AGENT_EFFORT` | `low`, `medium`, `high`, `xhigh` or `max` (default: `low`, the usual level for sub-agents) |
+
+Requests opt into Anthropic's server-side refusal fallback (`fallbacks: "default"`):
+a request a safety classifier declines is re-run on Anthropic's recommended
+fallback model instead of failing.
 
 #### HTTP routes
 
@@ -163,7 +184,7 @@ async def main() -> None:
     # HTTP: pass an Auth0 access token for this API (audience = the MCP resource URI)
     http_client = httpx2.AsyncClient(headers={"Authorization": "Bearer <access-token>"})
     async with Client(streamable_http_client("http://localhost:8000/mcp/", http_client=http_client)) as client:
-        print(await client.call_tool("search_cve", {"cve_id": "CVE-2023-44487"}))
+        print(await client.call_tool("web_search", {"query": "What is the Model Context Protocol?"}))
 
 
 asyncio.run(main())
@@ -210,13 +231,25 @@ Example `.cursor/mcp.json` entry to connect via stdio:
 
 ### What this server exposes
 
-- Tools (see `backend/app/tools/`):
-  - `search_cpe(product, version, vendor)` — search Common Platform Enumerations via NVD
-  - `search_cve(cve_id, cpe_name, keyword_search, cwe_id, cvss_v3_severity, has_kev, no_rejected, pub_start_date, pub_end_date)`
-    — search Common Vulnerabilities and Exposures; at least one filter is required
-- Prompts (see `backend/app/prompts/`):
-  - `sync_nvd_search(dependency_name, dependency_version)` — simple vulnerability search prompt
-  - `async_nvd_search(dependency_name, dependency_version)` — prompt with pre-fetched CVE data
+Two tools (see `backend/app/tools/` and `backend/app/agents.py`), no prompts:
+
+- `web_search(query)`: a Claude sub-agent searches DuckDuckGo
+  (pydantic-ai's `duckduckgo_search_tool`) and answers from the results.
+- `web_fetch(url, question?)`: a Claude sub-agent reads the page
+  (pydantic-ai's `web_fetch_tool`) and answers the question, or summarizes the
+  page. It can follow links on the same site only (the URL's host and its `www.`
+  twin, redirects included); private and cloud-metadata addresses are refused.
+
+Both return `{answer, sources, prompt_injection_detections}`. Each sub-agent has
+pydantic-ai-harness's `PromptInjectionDefender` with `block_high_risk=True`: every
+search result and fetched page is classified (StackOne defender, pattern
+detection) before the model reads it, high- and critical-risk results are
+replaced with a short notice, and each flagged result is listed in
+`prompt_injection_detections`. Treat `answer` as untrusted web content all the
+same: the defender catches known patterns, not every injection.
+
+Anthropic's server-side web search and fetch tools are not used on purpose: they
+run on Anthropic's side, so the defender would never see their results.
 
 ### Project scripts
 
@@ -240,6 +273,10 @@ uv run mdformat .             # format markdown
 `tests/test_mcp_client_compat.py` drives the server with the real `mcp` SDK
 client over HTTP (plain and Auth0-protected) and over stdio (`run-stdio`), so it
 catches protocol drift between `http-mcp` and MCP clients.
+`tests/test_web_agents.py` runs the real prompt-injection defender against
+injected search results and pages. No test calls Claude or the web: models are
+replaced with pydantic-ai's `TestModel`/`FunctionModel`, and an autouse fixture
+fails any test that would reach DuckDuckGo or download a page.
 
 ### Implementation notes
 

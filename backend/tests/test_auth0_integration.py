@@ -18,13 +18,13 @@ from pydantic import AnyHttpUrl, ValidationError
 from starlette.testclient import TestClient
 
 from app.auth0 import Auth0TokenValidator
-from app.prompts import PROMPTS
 from app.tools import create_tools
+from tests.fakes import SEARCH_ANSWER
 from tests.mcp_protocol import mcp_post, tool_call
 
 RESOURCE = "https://api.test/mcp/"
 ISSUER = "https://test.auth0.com/"
-ALL_SCOPES = ("tool:search_cpe", "tool:search_cve")
+ALL_SCOPES = ("tool:web_search", "tool:web_fetch")
 AUTH = {"Authorization": "Bearer valid-token"}
 
 
@@ -57,7 +57,7 @@ def _build_protected_app(
     validator: TokenValidator | None = None,
 ) -> TestClient:
     tools = create_tools(auth_enabled=True)
-    mcp_server = MCPServer(tools=tools, prompts=PROMPTS, name="test", version="1.0.0")
+    mcp_server = MCPServer(tools=tools, name="test", version="1.0.0")
 
     config = ProtectedMCPAppConfig(
         mcp_server=mcp_server,
@@ -129,9 +129,15 @@ class TestProtectedMCPToolAccess:
         with _build_protected_app() as client:
             resp = mcp_post(client, "/mcp/", "tools/list", headers=AUTH)
             assert resp.status_code == HTTPStatus.OK
-            tool_names = [t["name"] for t in resp.json()["result"]["tools"]]
-            assert "search_cpe" in tool_names
-            assert "search_cve" in tool_names
+            tool_names = {t["name"] for t in resp.json()["result"]["tools"]}
+            assert tool_names == {"web_search", "web_fetch"}
+
+    @pytest.mark.usefixtures("fake_agents")
+    def test_call_with_scope_runs_the_tool(self) -> None:
+        with _build_protected_app(scopes=("tool:web_search",)) as client:
+            resp = tool_call(client, "/mcp/", "web_search", {"query": "mcp"}, headers=AUTH)
+            assert resp.status_code == HTTPStatus.OK
+            assert resp.json()["result"]["structuredContent"]["answer"] == SEARCH_ANSWER["answer"]
 
     def test_authenticated_without_scopes_lists_no_tools(self) -> None:
         with _build_protected_app(scopes=()) as client:
@@ -140,18 +146,19 @@ class TestProtectedMCPToolAccess:
             assert resp.json()["result"]["tools"] == []
 
     def test_call_without_scope_asks_for_step_up(self) -> None:
-        with _build_protected_app(scopes=("tool:search_cpe",)) as client:
+        # The sub-agent never runs: the request is refused before the tool is invoked.
+        with _build_protected_app(scopes=("tool:web_search",)) as client:
             resp = tool_call(
                 client,
                 "/mcp/",
-                "search_cve",
-                {"cve_id": "CVE-2023-44487"},
+                "web_fetch",
+                {"url": "https://example.com/"},
                 headers=AUTH,
             )
             assert resp.status_code == HTTPStatus.FORBIDDEN
             challenge = resp.headers["WWW-Authenticate"]
             assert 'error="insufficient_scope"' in challenge
-            assert 'scope="tool:search_cve"' in challenge
+            assert 'scope="tool:web_fetch"' in challenge
 
     def test_invalid_token_returns_401(self) -> None:
         with _build_protected_app(require_authentication=True) as client:

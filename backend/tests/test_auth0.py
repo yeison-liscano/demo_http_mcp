@@ -24,7 +24,7 @@ class TestAuth0TokenValidatorValidate:
         mock_client = AsyncMock()
         mock_client.verify_access_token.return_value = {
             "sub": "user|123",
-            "scope": "tool:search_cpe tool:search_cve",
+            "scope": "tool:web_search tool:web_fetch",
             "client_id": "abc",
             "exp": 9999999999,
             "aud": "https://api.test/",
@@ -35,8 +35,8 @@ class TestAuth0TokenValidatorValidate:
 
         assert isinstance(result, TokenInfo)
         assert result.subject == "user|123"
-        assert "tool:search_cpe" in result.scopes
-        assert "tool:search_cve" in result.scopes
+        assert "tool:web_search" in result.scopes
+        assert "tool:web_fetch" in result.scopes
         assert result.client_id == "abc"
         assert result.expires_at == 9999999999
 
@@ -55,7 +55,7 @@ class TestAuth0TokenValidatorValidate:
         mock_client = AsyncMock()
         mock_client.verify_access_token.return_value = {
             "client_id": "m2m-client",
-            "scope": "tool:search_cpe",
+            "scope": "tool:web_search",
         }
         with patch("app.auth0.ApiClient", return_value=mock_client):
             validator = Auth0TokenValidator(domain="test.auth0.com", audience="https://api.test/")

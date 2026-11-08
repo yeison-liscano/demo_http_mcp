@@ -8,12 +8,12 @@ Each test runs against three transports:
 - ``stdio``: the real ``run-stdio`` entry point (`app.main.run_stdio`) as a subprocess.
 
 This is what catches protocol drift between http-mcp and the client ecosystem, which
-hand-built JSON-RPC requests cannot. NVD is faked in-process and in the subprocess.
+hand-built JSON-RPC requests cannot. The Claude sub-agents are faked (`tests.fakes`) in the
+served app and in the subprocess, so no test calls Claude or the web.
 """
 
 from __future__ import annotations
 
-import json
 import socket
 import sys
 import threading
@@ -24,7 +24,6 @@ from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, patch
 
 import httpx2
-import nvdlib
 import pytest
 import uvicorn
 from auth_mcp.resource_server import ProtectedMCPAppConfig, create_protected_mcp_app
@@ -33,29 +32,27 @@ from http_mcp.server import MCPServer
 from mcp import Client, StdioServerParameters
 from mcp.client.streamable_http import streamable_http_client
 from mcp.shared.exceptions import MCPError
-from mcp.types import GetPromptResult, TextContent
 from pydantic import AnyHttpUrl
 from starlette.applications import Starlette
 from starlette.routing import Mount
 
 from app.auth0 import Auth0TokenValidator
-from app.prompts import PROMPTS
 from app.tools import TOOLS, create_tools
-from tests.conftest import make_fake_cpe, make_fake_cve
+from tests.fakes import FETCH_ANSWER, SEARCH_ANSWER, fake_web_agents
 from tests.mcp_protocol import PROTOCOL_VERSION
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
-    from starlette.types import ASGIApp
+    from starlette.types import ASGIApp, Receive, Scope, Send
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 _STARTUP_TIMEOUT_S = 10.0
 _STDIO_BOOT = (
-    "import nvdlib; from tests.conftest import make_fake_cpe, make_fake_cve; "
-    "nvdlib.searchCVE = lambda **_: [make_fake_cve()]; "
-    "nvdlib.searchCPE = lambda **_: [make_fake_cpe()]; "
-    "from app.main import run_stdio; run_stdio()"
+    "from tests.fakes import fake_web_agents\n"
+    "from app.main import run_stdio\n"
+    "with fake_web_agents():\n"
+    "    run_stdio()\n"
 )
 TRANSPORTS = ("http", "http-auth0", "stdio")
 
@@ -66,9 +63,29 @@ def _free_port() -> int:
         return int(sock.getsockname()[1])
 
 
+def _with_fake_agents(app: ASGIApp) -> ASGIApp:
+    """Enter the agent fakes for each request.
+
+    uvicorn serves from another thread, and pydantic-ai's `Agent.override` is a context
+    variable, so an override entered in the test would not reach the server.
+    """
+
+    async def wrapped(scope: Scope, receive: Receive, send: Send) -> None:
+        with fake_web_agents():
+            await app(scope, receive, send)
+
+    return wrapped
+
+
 @contextmanager
 def _serve(app: ASGIApp, port: int) -> Iterator[None]:
-    server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning"))
+    config = uvicorn.Config(
+        _with_fake_agents(app),
+        host="127.0.0.1",
+        port=port,
+        log_level="warning",
+    )
+    server = uvicorn.Server(config)
     thread = threading.Thread(target=server.run, daemon=True)
     thread.start()
     deadline = time.monotonic() + _STARTUP_TIMEOUT_S
@@ -83,7 +100,7 @@ def _serve(app: ASGIApp, port: int) -> Iterator[None]:
 
 @pytest.fixture(scope="module")
 def plain_url() -> Iterator[str]:
-    mcp_server = MCPServer(tools=TOOLS, prompts=PROMPTS, name="test", version="1.0.0")
+    mcp_server = MCPServer(tools=TOOLS, name="test", version="1.0.0")
     port = _free_port()
     with _serve(Starlette(routes=[Mount("/mcp", mcp_server.app)]), port):
         yield f"http://127.0.0.1:{port}/mcp/"
@@ -96,7 +113,7 @@ def protected_url() -> Iterator[str]:
     auth0_api = AsyncMock()
     auth0_api.verify_access_token.return_value = {
         "sub": "user|123",
-        "scope": "tool:search_cpe tool:search_cve",
+        "scope": "tool:web_search tool:web_fetch",
         "aud": resource,
         "exp": 9999999999,
     }
@@ -106,7 +123,6 @@ def protected_url() -> Iterator[str]:
         ProtectedMCPAppConfig(
             mcp_server=MCPServer(
                 tools=create_tools(auth_enabled=True),
-                prompts=PROMPTS,
                 name="test",
                 version="1.0.0",
             ),
@@ -119,12 +135,6 @@ def protected_url() -> Iterator[str]:
     )
     with _serve(app, port):
         yield resource
-
-
-@pytest.fixture(autouse=True)
-def _fake_nvd(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(nvdlib, "searchCVE", lambda **_: [make_fake_cve()])
-    monkeypatch.setattr(nvdlib, "searchCPE", lambda **_: [make_fake_cpe()])
 
 
 @pytest.fixture(params=TRANSPORTS)
@@ -151,12 +161,6 @@ def _structured(result: Any) -> dict[str, Any]:  # noqa: ANN401
     return result.structured_content
 
 
-def _text(prompt: GetPromptResult) -> str:
-    content = prompt.messages[0].content
-    assert isinstance(content, TextContent), content
-    return content.text
-
-
 async def test_negotiates_current_protocol(client: Client) -> None:
     async with client:
         assert client.protocol_version == PROTOCOL_VERSION
@@ -164,39 +168,30 @@ async def test_negotiates_current_protocol(client: Client) -> None:
         assert client.server_info.name == "test"
 
 
-async def test_lists_tools_and_prompts(client: Client) -> None:
+async def test_lists_web_tools(client: Client) -> None:
     async with client:
-        tools = {t.name for t in (await client.list_tools()).tools}
-        prompts = {p.name for p in (await client.list_prompts()).prompts}
-    assert tools == {"search_cpe", "search_cve"}
-    assert prompts == {"async_nvd_search", "sync_nvd_search"}
+        tools = {t.name: t for t in (await client.list_tools()).tools}
+    assert set(tools) == {"web_search", "web_fetch"}
+    for tool in tools.values():
+        assert tool.output_schema is not None
+        assert "prompt_injection_detections" in tool.output_schema["properties"]
 
 
-async def test_calls_tools(client: Client) -> None:
+async def test_calls_web_tools(client: Client) -> None:
     async with client:
-        cpe = await client.call_tool("search_cpe", {"product": "curl", "version": "8.4.0"})
-        cve = await client.call_tool("search_cve", {"cve_id": "CVE-2023-44487"})
-    assert _structured(cpe)["cpes"][0]["cpeName"].startswith("cpe:2.3:a:haxx:curl")
-    assert _structured(cve)["cves"][0]["id"] == "CVE-2023-44487"
+        search = await client.call_tool("web_search", {"query": "what is MCP?"})
+        fetch = await client.call_tool(
+            "web_fetch",
+            {"url": "https://example.com/", "question": "What is this page for?"},
+        )
+    assert _structured(search) == {**SEARCH_ANSWER, "prompt_injection_detections": []}
+    assert _structured(fetch) == {**FETCH_ANSWER, "prompt_injection_detections": []}
 
 
 async def test_invalid_arguments_raise_invalid_params(client: Client) -> None:
     async with client:
-        with pytest.raises(MCPError, match="Version must be a valid semver"):
-            await client.call_tool("search_cpe", {"product": "curl", "version": "8.4"})
-
-
-async def test_gets_prompts(client: Client) -> None:
-    args = {"dependency_name": "curl", "dependency_version": "8.4.0"}
-    async with client:
-        simple = await client.get_prompt("sync_nvd_search", args)
-        enriched = await client.get_prompt("async_nvd_search", args)
-
-    assert _text(simple) == "Search for vulnerabilities in curl 8.4.0"
-    text = _text(enriched)
-    # The preamble mentions "<cves>" too, so take the block after the last opening tag.
-    cves = json.loads(text.rsplit("<cves>", 1)[1].split("</cves>", 1)[0])
-    assert cves[0]["cves"][0]["id"] == "CVE-2023-44487"
+        with pytest.raises(MCPError, match="url"):
+            await client.call_tool("web_fetch", {"url": "file:///etc/passwd"})
 
 
 async def test_http_without_token_is_refused(protected_url: str) -> None:

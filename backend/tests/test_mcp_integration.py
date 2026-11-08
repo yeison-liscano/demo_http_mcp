@@ -1,24 +1,24 @@
-"""MCP tool integration tests (no auth — tests tool logic directly)."""
+"""MCP protocol integration tests for the web tools (no auth; sub-agents faked)."""
 
 from http import HTTPStatus
 
+import pytest
 from http_mcp.server import MCPServer
-from pymocks import Mock, with_mock
 from starlette.applications import Starlette
 from starlette.routing import Mount
 from starlette.testclient import TestClient
 
-from app.prompts import PROMPTS
 from app.tools import TOOLS
-from tests.conftest import SearchCPECapture, SearchCVECapture
+from tests.fakes import FETCH_ANSWER, SEARCH_ANSWER
 from tests.mcp_protocol import PROTOCOL_VERSION, mcp_post, tool_call
 
 HTTP_OK = HTTPStatus.OK.value
 INVALID_PARAMS = -32602
+METHOD_NOT_FOUND = -32601
 HEADER_MISMATCH = -32020
 
 # Standalone MCP server without auth for testing tool logic
-_mcp_server = MCPServer(tools=TOOLS, prompts=PROMPTS, name="test", version="1.0.0")
+_mcp_server = MCPServer(tools=TOOLS, name="test", version="1.0.0")
 _app = Starlette(routes=[Mount("/", _mcp_server.app)])
 
 
@@ -29,15 +29,21 @@ class TestMCPDiscovery:
             assert resp.status_code == HTTP_OK
             result = resp.json()["result"]
             assert result["supportedVersions"] == [PROTOCOL_VERSION]
-            assert "tools" in result["capabilities"]
-            assert "prompts" in result["capabilities"]
+            assert set(result["capabilities"]) == {"tools"}
 
-    def test_lists_tools_and_prompts(self) -> None:
+    def test_lists_web_tools(self) -> None:
         with TestClient(_app) as client:
             tools = mcp_post(client, "/", "tools/list").json()["result"]["tools"]
-            prompts = mcp_post(client, "/", "prompts/list").json()["result"]["prompts"]
-        assert {t["name"] for t in tools} == {"search_cpe", "search_cve"}
-        assert {p["name"] for p in prompts} == {"async_nvd_search", "sync_nvd_search"}
+        assert {t["name"] for t in tools} == {"web_search", "web_fetch"}
+        for tool in tools:
+            assert tool["annotations"]["readOnlyHint"] is True
+            assert tool["annotations"]["openWorldHint"] is True
+            assert "prompt_injection_detections" in tool["outputSchema"]["properties"]
+
+    def test_prompts_are_not_served(self) -> None:
+        with TestClient(_app) as client:
+            resp = mcp_post(client, "/", "prompts/list")
+            assert resp.json()["error"]["code"] == METHOD_NOT_FOUND
 
     def test_legacy_initialize_handshake_is_rejected(self) -> None:
         """A pre-2026-07-28 client (initialize without mirrored headers) cannot connect."""
@@ -69,55 +75,61 @@ class TestMCPDiscovery:
             assert resp.status_code == HTTP_OK
 
 
-class TestMCPSearchCVE:
-    def test_search_cve_by_id(
-        self,
-        fake_search_cve: SearchCVECapture,  # noqa: ARG002
-        mock_search_cve: Mock,
-    ) -> None:
-        with with_mock(mock_search_cve), TestClient(_app) as client:
-            resp = tool_call(client, "/", "search_cve", {"cve_id": "CVE-2023-44487"})
-            assert resp.status_code == HTTP_OK
-            data = resp.json()
-            assert "result" in data
-            assert data["result"]["isError"] is False
-            content = data["result"]["structuredContent"]
-            assert len(content["cves"]) == 1
-            assert content["cves"][0]["id"] == "CVE-2023-44487"
-
-    def test_search_cve_no_filters_returns_error(self) -> None:
+@pytest.mark.usefixtures("fake_agents")
+class TestWebTools:
+    def test_web_search(self) -> None:
         with TestClient(_app) as client:
-            resp = tool_call(client, "/", "search_cve", {})
-            assert resp.status_code == HTTP_OK
-            data = resp.json()
-            assert data["error"]["code"] == INVALID_PARAMS
-            assert "At least one search filter" in data["error"]["message"]
+            resp = tool_call(client, "/", "web_search", {"query": "what is MCP?"})
+        assert resp.status_code == HTTP_OK
+        result = resp.json()["result"]
+        assert result["isError"] is False
+        assert result["structuredContent"] == {
+            **SEARCH_ANSWER,
+            "prompt_injection_detections": [],
+        }
 
-
-class TestMCPSearchCPE:
-    def test_search_cpe(
-        self,
-        fake_search_cpe: SearchCPECapture,  # noqa: ARG002
-        mock_search_cpe: Mock,
-    ) -> None:
-        with with_mock(mock_search_cpe), TestClient(_app) as client:
-            resp = tool_call(client, "/", "search_cpe", {"product": "curl", "version": "8.4.0"})
-            assert resp.status_code == HTTP_OK
-            data = resp.json()
-            assert "result" in data
-            assert data["result"]["isError"] is False
-            content = data["result"]["structuredContent"]
-            assert len(content["cpes"]) == 1
-            assert "curl" in content["cpes"][0]["cpeName"]
+    def test_web_fetch(self) -> None:
+        with TestClient(_app) as client:
+            resp = tool_call(client, "/", "web_fetch", {"url": "https://example.com/"})
+        assert resp.status_code == HTTP_OK
+        result = resp.json()["result"]
+        assert result["isError"] is False
+        assert result["structuredContent"]["answer"] == FETCH_ANSWER["answer"]
 
     def test_tool_name_header_must_match_body(self) -> None:
         with TestClient(_app) as client:
             resp = tool_call(
                 client,
                 "/",
-                "search_cpe",
-                {"product": "curl", "version": "8.4.0"},
-                headers={"Mcp-Name": "search_cve"},
+                "web_search",
+                {"query": "mcp"},
+                headers={"Mcp-Name": "web_fetch"},
             )
             assert resp.status_code == HTTPStatus.BAD_REQUEST
             assert resp.json()["error"]["code"] == HEADER_MISMATCH
+
+
+class TestInvalidArguments:
+    """Rejected before any sub-agent runs, so no fake is needed."""
+
+    @pytest.mark.parametrize(
+        ("tool", "arguments"),
+        [
+            ("web_search", {}),
+            ("web_search", {"query": ""}),
+            ("web_search", {"query": "x" * 501}),
+            ("web_fetch", {}),
+            ("web_fetch", {"url": "file:///etc/passwd"}),
+            ("web_fetch", {"url": "not a url"}),
+            ("web_fetch", {"url": "https://example.com/", "question": "x" * 501}),
+        ],
+    )
+    def test_invalid_arguments_return_invalid_params(
+        self,
+        tool: str,
+        arguments: dict[str, object],
+    ) -> None:
+        with TestClient(_app) as client:
+            resp = tool_call(client, "/", tool, arguments)
+        assert resp.status_code == HTTP_OK
+        assert resp.json()["error"]["code"] == INVALID_PARAMS

@@ -10,16 +10,14 @@ from pydantic import AnyHttpUrl
 
 from app.auth0 import Auth0TokenValidator
 from app.config import Config
-from app.prompts import PROMPTS
 from app.tools import create_tools
 
 THIS_DIR = Path(__file__).parent
-TOOL_SCOPES = ("tool:search_cpe", "tool:search_cve")
+TOOL_SCOPES = ("tool:web_search", "tool:web_fetch")
 
 config = Config()
 mcp_server = MCPServer(
     tools=create_tools(auth_enabled=config.auth0_enabled),
-    prompts=PROMPTS,
     name="test",
     version="1.0.0",
 )
