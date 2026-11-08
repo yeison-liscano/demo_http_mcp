@@ -247,8 +247,10 @@ catches protocol drift between `http-mcp` and MCP clients.
   endpoint at `/mcp/` requires a valid Auth0 Bearer token with the
   appropriate tool scopes.
 - `Auth0ClientStore` (dynamic client registration proxied to a pre-created
-  Auth0 application) is kept but not mounted: http-mcp >= 0.19 only accepts
-  HTTPS authorization servers and endpoints, and MCP clients on SDK 2.x require
+  Auth0 application) is kept but not mounted: http-mcp >= 0.19 accepts only
+  HTTPS authorization servers and endpoints unless loopback HTTP is explicitly
+  enabled with `AuthorizationTransportPolicy.ALLOW_LOOPBACK_HTTP` (0.19.0rc2+,
+  development only), and MCP clients on SDK 2.x require
   the metadata `issuer` to match the advertised server, which a localhost proxy
   for Auth0 cannot satisfy.
 - Only loopback browser origins are accepted on `/mcp/` (http-mcp's DNS

@@ -427,16 +427,16 @@ wheels = [
 
 [[package]]
 name = "http-mcp"
-version = "0.19.0rc1"
+version = "0.19.0rc2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pydantic" },
     { name = "starlette" },
     { name = "uvicorn" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/66/a8/a9e19744d06d5a668afcb5b193aae9a6b306cf3f7a553fe9d49e82316bb2/http_mcp-0.19.0rc1.tar.gz", hash = "sha256:08561dc00a3b928fcac444d9b6fcbc334ecb165ec514b60676780b6b10553bc2", size = 633992, upload-time = "2026-11-08T15:47:06.7Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/24/64/ef8fb3f4265aba8e21f94f117dac721307e172dd6427121dc7b266b323b0/http_mcp-0.19.0rc2.tar.gz", hash = "sha256:5940b2bfb6c15278f4dcacfd4b9a3e5c62878d4d88e3f375c511b4c32769f05b", size = 639116, upload-time = "2026-11-08T22:23:57.881Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/72/4b/453c527f59a67ffcb931765cbccbec7924fae23df9708a8fd2dcc92aede4/http_mcp-0.19.0rc1-py3-none-any.whl", hash = "sha256:f984bd0e87856b90d001e20d9e1f3b9f21b0be3807911b03b7d9b49d237ddcae", size = 81917, upload-time = "2026-11-08T15:47:05.652Z" },
+    { url = "https://files.pythonhosted.org/packages/2c/be/2d7cffb90336204c261c3436aba0a7fa920a536b0fb10facf20f60b587e2/http_mcp-0.19.0rc2-py3-none-any.whl", hash = "sha256:c5c0d70ce615b48fe9cefd339519a43d8d5cbfaff8d1686246f320113b724a8e", size = 84119, upload-time = "2026-11-08T22:23:56.841Z" },
 ]
 
 [[package]]
@@ -1116,7 +1116,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "auth0-api-python", specifier = "==1.0.0b10" },
-    { name = "http-mcp", extras = ["auth"], specifier = "==0.19.0rc1" },
+    { name = "http-mcp", extras = ["auth"], specifier = "==0.19.0rc2" },
     { name = "httpx", specifier = "==0.28.1" },
     { name = "nvdlib", specifier = "==0.9.0" },
     { name = "pydantic", specifier = "==2.14.3" },

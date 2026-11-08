@@ -12,7 +12,7 @@ from auth_mcp.resource_server import (
     TokenValidator,
     create_protected_mcp_app,
 )
-from auth_mcp.types import ProtectedResourceMetadata
+from auth_mcp.types import AuthorizationTransportPolicy, ProtectedResourceMetadata
 from http_mcp.server import MCPServer
 from pydantic import AnyHttpUrl, ValidationError
 from starlette.testclient import TestClient
@@ -83,11 +83,38 @@ class TestProtectedMCPMetadata:
             assert data["authorization_servers"] == [ISSUER]
 
     def test_http_authorization_server_is_rejected(self) -> None:
-        """http-mcp >= 0.19 refuses non-HTTPS issuers, even on localhost."""
+        """http-mcp >= 0.19 refuses non-HTTPS issuers by default, even on localhost."""
         with pytest.raises(ValidationError, match="HTTPS"):
             ProtectedResourceMetadata(
                 resource=AnyHttpUrl("http://localhost:8000/mcp/"),
                 authorization_servers=("http://localhost:8000",),
+            )
+
+    def test_loopback_http_issuer_requires_explicit_opt_in(self) -> None:
+        """0.19.0rc2: a validation-context opt-in allows HTTP issuers on loopback only."""
+        local_issuer = "http://localhost:9000"
+        metadata = ProtectedResourceMetadata.model_validate(
+            {"resource": "http://localhost:8000/mcp/", "authorization_servers": [local_issuer]},
+            context=AuthorizationTransportPolicy.ALLOW_LOOPBACK_HTTP,
+        )
+        app = create_protected_mcp_app(
+            ProtectedMCPAppConfig(
+                mcp_server=MCPServer(tools=(), prompts=(), name="test", version="1.0.0"),
+                token_validator=FakeTokenValidator(scopes=()),
+                resource_endpoint=metadata,
+                mcp_path="/mcp",
+            ),
+        )
+        with TestClient(app) as client:
+            resp = client.get("/.well-known/oauth-protected-resource/mcp/")
+        assert resp.status_code == HTTPStatus.OK
+        # Served verbatim: the opt-in is validation context, never metadata.
+        assert resp.json()["authorization_servers"] == [local_issuer]
+
+        with pytest.raises(ValidationError, match="HTTPS"):
+            ProtectedResourceMetadata.model_validate(
+                {"resource": RESOURCE, "authorization_servers": ["http://auth.example"]},
+                context=AuthorizationTransportPolicy.ALLOW_LOOPBACK_HTTP,
             )
 
 
