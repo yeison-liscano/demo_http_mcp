@@ -22,8 +22,10 @@ class NVDSearchInput(BaseModel):
     @classmethod
     def validate_dependency_name(cls, name: str) -> str:
         if len(name) < MIN_LENGTH or len(name) > MAX_NAME_LENGTH:
-            message = f"Dependency name must be between {MIN_LENGTH} and {MAX_NAME_LENGTH} "
-            "characters long"
+            message = (
+                f"Dependency name must be between {MIN_LENGTH} and {MAX_NAME_LENGTH} "
+                "characters long"
+            )
             raise ValueError(message)
 
         if not name.isalnum():
@@ -36,8 +38,10 @@ class NVDSearchInput(BaseModel):
     @classmethod
     def validate_dependency_version(cls, version: str) -> str:
         if len(version) < MIN_LENGTH or len(version) > MAX_VERSION_LENGTH:
-            message = f"Dependency version must be between {MIN_LENGTH} and {MAX_VERSION_LENGTH} "
-            "characters long"
+            message = (
+                f"Dependency version must be between {MIN_LENGTH} and {MAX_VERSION_LENGTH} "
+                "characters long"
+            )
             raise ValueError(message)
 
         if not re.match(r"^[0-9]+\.[0-9]+\.[0-9]+$", version):
@@ -49,8 +53,10 @@ class NVDSearchInput(BaseModel):
 
 def sync_nvd_search(args: Arguments[NVDSearchInput]) -> tuple[PromptMessage, ...]:
     """Search for vulnerabilities in a dependency model controlled version."""
-    message = f"Search for vulnerabilities in {args.inputs.dependency_name} "
-    f"{args.inputs.dependency_version}"
+    message = (
+        f"Search for vulnerabilities in {args.inputs.dependency_name} "
+        f"{args.inputs.dependency_version}"
+    )
     return (PromptMessage(role="user", content=TextContent(text=message)),)
 
 
@@ -84,6 +90,13 @@ async def async_nvd_search(args: Arguments[NVDSearchInput]) -> tuple[PromptMessa
     return (
         PromptMessage(
             role="user",
-            content=TextContent(text=message.format(cve_results=json.dumps(cve_results, indent=2))),
+            content=TextContent(
+                text=message.format(
+                    cve_results=json.dumps(
+                        [result.model_dump(mode="json", by_alias=True) for result in cve_results],
+                        indent=2,
+                    ),
+                ),
+            ),
         ),
     )

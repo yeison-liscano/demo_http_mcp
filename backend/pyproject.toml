@@ -14,28 +14,26 @@ requires-python = ">=3.13,<3.14"
 version = "0.0.1"
 
 dependencies = [
-    "pydantic==2.12.5",
-    "uvicorn==0.41.0",
-    "starlette==0.52.1",
-    "http-mcp[auth]==0.12.0",
-    "fastapi==0.135.3",
-    "logfire[fastapi,sqlite3]==4.16.0",
-    "pydantic-ai==1.77.0",
-    "nvdlib==0.8.3",
-    "mcp>=1.23.0",
-    "auth0-api-python>=1.0.0b6",
+    "pydantic==2.14.3",
+    "uvicorn==0.54.0",
+    "starlette==1.10.0",
+    "http-mcp[auth]==0.19.0rc1",
+    "nvdlib==0.9.0",
+    "auth0-api-python==1.0.0b10",
+    "pydantic-settings==2.16.2",
+    "httpx==0.28.1",
 ]
 
 [dependency-groups]
 dev = [
-    "httpx==0.28.1",
+    "mcp==2.3.0",
     "mdformat==1.0.0",
-    "mypy==1.19.0",
-    "pytest==9.0.2",
-    "ruff==0.14.8",
-    "pytest-cov==7.0.0",
-    "pytest-asyncio>=0.24.0",
-    "py-mocks==0.3.0",
+    "mypy==2.4.1",
+    "pytest==9.2.0",
+    "ruff==0.17.4",
+    "pytest-cov==7.1.0",
+    "pytest-asyncio==1.4.1.post1",
+    "py-mocks==0.5.0",
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -56,6 +54,7 @@ build-backend = "hatchling.build"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 
 [tool.uv.sources]
 microsoft-python-type-stubs = { git = "https://github.com/microsoft/python-type-stubs.git" }

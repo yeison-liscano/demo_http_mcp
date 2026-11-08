@@ -18,6 +18,7 @@ class Auth0TokenValidator(TokenValidator):
             msg = "Auth0 domain and audience must be non-empty"
             LOGGER.debug(msg)
             raise ValueError(msg)
+        self._audience = audience
         self._api_client = ApiClient(ApiClientOptions(domain=domain, audience=audience))
 
     async def validate_token(
@@ -40,7 +41,11 @@ class Auth0TokenValidator(TokenValidator):
             scopes=tuple(scope_str.split()) if scope_str else (),
             expires_at=decoded.get("exp"),
             client_id=decoded.get("client_id"),
-            audience=decoded.get("aud"),
+            # verify_access_token already checked that `aud` contains the configured
+            # audience. Report that single value: `aud` may be a list, and auth_mcp
+            # (http-mcp >= 0.19) rejects tokens whose audience is not the MCP resource
+            # URI, so AUTH0_AUDIENCE must be that URI (RFC 8707).
+            audience=self._audience,
         )
 
 

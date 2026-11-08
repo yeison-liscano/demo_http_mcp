@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from http import HTTPStatus
+from unittest.mock import AsyncMock, patch
+
+import pytest
 from auth_mcp.resource_server import (
     ProtectedMCPAppConfig,
     TokenInfo,
@@ -10,18 +14,26 @@ from auth_mcp.resource_server import (
 )
 from auth_mcp.types import ProtectedResourceMetadata
 from http_mcp.server import MCPServer
-from pydantic import AnyHttpUrl
+from pydantic import AnyHttpUrl, ValidationError
 from starlette.testclient import TestClient
 
+from app.auth0 import Auth0TokenValidator
 from app.prompts import PROMPTS
 from app.tools import create_tools
+from tests.mcp_protocol import mcp_post, tool_call
+
+RESOURCE = "https://api.test/mcp/"
+ISSUER = "https://test.auth0.com/"
+ALL_SCOPES = ("tool:search_cpe", "tool:search_cve")
+AUTH = {"Authorization": "Bearer valid-token"}
 
 
 class FakeTokenValidator(TokenValidator):
     """Returns a fixed TokenInfo for any token, or None for 'bad-token'."""
 
-    def __init__(self, scopes: tuple[str, ...] = ()) -> None:
+    def __init__(self, scopes: tuple[str, ...] = (), audience: str | None = None) -> None:
         self._scopes = scopes
+        self._audience = audience
 
     async def validate_token(
         self,
@@ -34,43 +46,26 @@ class FakeTokenValidator(TokenValidator):
             subject="user|123",
             scopes=self._scopes,
             client_id="test-client",
+            audience=self._audience,
         )
 
 
-def _jsonrpc(method: str, params: dict | None = None, req_id: int = 1) -> dict:
-    body: dict = {"jsonrpc": "2.0", "id": req_id, "method": method}
-    if params is not None:
-        body["params"] = params
-    return body
-
-
-def _init_request() -> dict:
-    return _jsonrpc(
-        "initialize",
-        {
-            "protocolVersion": "2025-03-26",
-            "capabilities": {},
-            "clientInfo": {"name": "test", "version": "0.0.1"},
-        },
-        req_id=0,
-    )
-
-
 def _build_protected_app(
-    scopes: tuple[str, ...] = ("tool:search_cpe", "tool:search_cve"),
+    scopes: tuple[str, ...] = ALL_SCOPES,
     *,
     require_authentication: bool = False,
+    validator: TokenValidator | None = None,
 ) -> TestClient:
     tools = create_tools(auth_enabled=True)
     mcp_server = MCPServer(tools=tools, prompts=PROMPTS, name="test", version="1.0.0")
 
     config = ProtectedMCPAppConfig(
         mcp_server=mcp_server,
-        token_validator=FakeTokenValidator(scopes=scopes),
+        token_validator=validator or FakeTokenValidator(scopes=scopes),
         resource_endpoint=ProtectedResourceMetadata(
-            resource=AnyHttpUrl("https://api.test/"),
-            authorization_servers=(AnyHttpUrl("https://test.auth0.com/"),),
-            scopes_supported=("tool:search_cpe", "tool:search_cve"),
+            resource=AnyHttpUrl(RESOURCE),
+            authorization_servers=(ISSUER,),
+            scopes_supported=ALL_SCOPES,
         ),
         mcp_path="/mcp",
         require_authentication=require_authentication,
@@ -82,45 +77,112 @@ def _build_protected_app(
 class TestProtectedMCPMetadata:
     def test_metadata_endpoint_accessible_without_token(self) -> None:
         with _build_protected_app() as client:
-            resp = client.get("/.well-known/oauth-protected-resource/mcp")
-            assert resp.status_code == 200
+            resp = client.get("/.well-known/oauth-protected-resource/mcp/")
+            assert resp.status_code == HTTPStatus.OK
             data = resp.json()
-            assert "https://test.auth0.com/" in data["authorization_servers"]
+            assert data["authorization_servers"] == [ISSUER]
+
+    def test_http_authorization_server_is_rejected(self) -> None:
+        """http-mcp >= 0.19 refuses non-HTTPS issuers, even on localhost."""
+        with pytest.raises(ValidationError, match="HTTPS"):
+            ProtectedResourceMetadata(
+                resource=AnyHttpUrl("http://localhost:8000/mcp/"),
+                authorization_servers=("http://localhost:8000",),
+            )
 
 
 class TestProtectedMCPToolAccess:
     def test_unauthenticated_lists_no_scoped_tools(self) -> None:
         with _build_protected_app() as client:
-            client.post("/mcp", json=_init_request())
-            resp = client.post("/mcp", json=_jsonrpc("tools/list"))
-            assert resp.status_code == 200
-            data = resp.json()
-            assert len(data["result"]["tools"]) == 0
+            resp = mcp_post(client, "/mcp/", "tools/list")
+            assert resp.status_code == HTTPStatus.OK
+            assert resp.json()["result"]["tools"] == []
 
     def test_authenticated_with_scopes_lists_tools(self) -> None:
         with _build_protected_app() as client:
-            headers = {"Authorization": "Bearer valid-token"}
-            client.post("/mcp", json=_init_request(), headers=headers)
-            resp = client.post("/mcp", json=_jsonrpc("tools/list"), headers=headers)
-            assert resp.status_code == 200
+            resp = mcp_post(client, "/mcp/", "tools/list", headers=AUTH)
+            assert resp.status_code == HTTPStatus.OK
             tool_names = [t["name"] for t in resp.json()["result"]["tools"]]
             assert "search_cpe" in tool_names
             assert "search_cve" in tool_names
 
     def test_authenticated_without_scopes_lists_no_tools(self) -> None:
         with _build_protected_app(scopes=()) as client:
-            headers = {"Authorization": "Bearer valid-token"}
-            client.post("/mcp", json=_init_request(), headers=headers)
-            resp = client.post("/mcp", json=_jsonrpc("tools/list"), headers=headers)
-            assert resp.status_code == 200
-            assert len(resp.json()["result"]["tools"]) == 0
+            resp = mcp_post(client, "/mcp/", "tools/list", headers=AUTH)
+            assert resp.status_code == HTTPStatus.OK
+            assert resp.json()["result"]["tools"] == []
+
+    def test_call_without_scope_asks_for_step_up(self) -> None:
+        with _build_protected_app(scopes=("tool:search_cpe",)) as client:
+            resp = tool_call(
+                client,
+                "/mcp/",
+                "search_cve",
+                {"cve_id": "CVE-2023-44487"},
+                headers=AUTH,
+            )
+            assert resp.status_code == HTTPStatus.FORBIDDEN
+            challenge = resp.headers["WWW-Authenticate"]
+            assert 'error="insufficient_scope"' in challenge
+            assert 'scope="tool:search_cve"' in challenge
 
     def test_invalid_token_returns_401(self) -> None:
         with _build_protected_app(require_authentication=True) as client:
-            resp = client.post(
-                "/mcp",
-                json=_init_request(),
+            resp = mcp_post(
+                client,
+                "/mcp/",
+                "server/discover",
                 headers={"Authorization": "Bearer bad-token"},
             )
-            assert resp.status_code == 401
-            assert "WWW-Authenticate" in resp.headers
+            assert resp.status_code == HTTPStatus.UNAUTHORIZED
+            assert 'error="invalid_token"' in resp.headers["WWW-Authenticate"]
+
+    def test_missing_token_returns_401_without_error_code(self) -> None:
+        with _build_protected_app(require_authentication=True) as client:
+            resp = mcp_post(client, "/mcp/", "server/discover")
+            assert resp.status_code == HTTPStatus.UNAUTHORIZED
+            challenge = resp.headers["WWW-Authenticate"]
+            assert "resource_metadata=" in challenge
+            assert "error=" not in challenge
+
+
+class TestAudienceBinding:
+    """auth_mcp >= 0.19 rejects tokens whose audience names another resource."""
+
+    def test_token_for_other_resource_is_rejected(self) -> None:
+        validator = FakeTokenValidator(scopes=ALL_SCOPES, audience="https://other.test/")
+        with _build_protected_app(require_authentication=True, validator=validator) as client:
+            resp = mcp_post(client, "/mcp/", "tools/list", headers=AUTH)
+            assert resp.status_code == HTTPStatus.UNAUTHORIZED
+
+    @pytest.mark.parametrize("aud", [RESOURCE, [RESOURCE, f"{ISSUER}userinfo"]])
+    def test_auth0_token_for_this_resource_is_accepted(self, aud: object) -> None:
+        mock_client = AsyncMock()
+        mock_client.verify_access_token.return_value = {
+            "sub": "user|123",
+            "scope": " ".join(ALL_SCOPES),
+            "aud": aud,
+            "exp": 9999999999,
+        }
+        with patch("app.auth0.ApiClient", return_value=mock_client):
+            validator = Auth0TokenValidator(domain="test.auth0.com", audience=RESOURCE)
+        with _build_protected_app(require_authentication=True, validator=validator) as client:
+            resp = mcp_post(client, "/mcp/", "tools/list", headers=AUTH)
+            assert resp.status_code == HTTPStatus.OK
+            assert len(resp.json()["result"]["tools"]) == len(ALL_SCOPES)
+
+    def test_auth0_audience_that_is_not_the_resource_is_rejected(self) -> None:
+        mock_client = AsyncMock()
+        mock_client.verify_access_token.return_value = {
+            "sub": "user|123",
+            "scope": " ".join(ALL_SCOPES),
+            "aud": "https://legacy-api-identifier/",
+        }
+        with patch("app.auth0.ApiClient", return_value=mock_client):
+            validator = Auth0TokenValidator(
+                domain="test.auth0.com",
+                audience="https://legacy-api-identifier/",
+            )
+        with _build_protected_app(require_authentication=True, validator=validator) as client:
+            resp = mcp_post(client, "/mcp/", "tools/list", headers=AUTH)
+            assert resp.status_code == HTTPStatus.UNAUTHORIZED

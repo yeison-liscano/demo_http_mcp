@@ -1,7 +1,6 @@
 import asyncio
 
 import nvdlib
-from fastapi import Request
 from http_mcp.types import Arguments
 
 from app.tools.models import (
@@ -12,13 +11,6 @@ from app.tools.models import (
     SearchCVEInput,
     SearchCVEOutput,
 )
-
-
-def get_key(request: Request) -> str | None:
-    key = request.headers.get("Authorization", "").strip().split(" ")[-1]
-    if not key:
-        return None
-    return key
 
 
 def search_cpe(arg: Arguments[SearchCPEInput]) -> SearchCPEOutput:

@@ -1,5 +1,5 @@
 {
-  description = "demo_http_mcp — HTTP MCP server (Python/uv) + React frontend (Vite/npm)";
+  description = "demo_http_mcp — MCP server over HTTP and stdio (Python/uv)";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -27,15 +27,13 @@
             pkgs.python313
             pkgs.uv
 
-            # --- Frontend: Vite 8 needs Node >=20.19; @types/node is ^24 ---
+            # --- Node: npx-based MCP tooling (e.g. the auth0 server in .mcp.json) ---
             pkgs.nodejs_24
 
             # --- Shared tooling ---
             # git: .githooks/pre-push, and the uv git source for
             # microsoft-python-type-stubs in backend/pyproject.toml
             pkgs.git
-            # sqlite CLI: inspect the agent memory DB written by app/agen_memory.py
-            pkgs.sqlite
             # TLS roots for uv / npm network fetches
             pkgs.cacert
           ];
@@ -45,9 +43,6 @@
             # so every toolchain dependency comes from this flake.
             UV_PYTHON = pkgs.python313.interpreter;
             UV_PYTHON_DOWNLOADS = "never";
-
-            # Default model backend for the pydantic-ai agent (app/app.py).
-            OLLAMA_BASE_URL = "http://localhost:11434/v1";
           };
 
           shellHook = ''
@@ -66,8 +61,8 @@
 
             echo "demo_http_mcp dev shell"
             echo "  python $(python3 --version 2>&1 | cut -d' ' -f2)  uv $(uv --version | cut -d' ' -f2)  node $(node --version)"
-            echo "  backend:  cd backend && uv sync && uv run run-app-local"
-            echo "  frontend: cd frontend && npm install && npm run dev"
+            echo "  http:  cd backend && uv sync && uv run run-app-local"
+            echo "  stdio: cd backend && uv run run-stdio"
           '';
         };
       });

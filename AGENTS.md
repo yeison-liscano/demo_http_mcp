@@ -2,44 +2,40 @@
 
 ## Architecture Overview
 
-This is an MCP (Model Context Protocol) server with Auth0 OAuth2 authentication,
-a chat agent, and a React frontend.
+This is an MCP (Model Context Protocol) server built on `http-mcp`, served over
+HTTP (with Auth0 OAuth2 authentication) or stdio. It speaks only MCP protocol
+revision `2026-07-28`. It also serves as the compatibility testbed for `http-mcp`
+releases.
 
 ### App structure
 
-- **Root app** (`app` in `backend/app/app.py`) — Auth0-protected MCP app created
-  by `auth_mcp`. Handles `/mcp/`, `/register`, `/.well-known/` endpoints.
-- **FastAPI sub-app** (`fast_app`, mounted at `/api`) — chat endpoints, frontend
-  serving. Chat endpoints are intentionally unauthenticated for local dev.
-- **Frontend** (`frontend/`) — React + TypeScript + Vite SPA.
+- **HTTP app** (`app` in `backend/app/app.py`) — Auth0-protected MCP app created
+  by `auth_mcp`. Handles `/mcp/` and `/.well-known/oauth-protected-resource/mcp/`.
+- **stdio server** (`run_stdio` in `backend/app/main.py`) — same tools and prompts,
+  no authentication or scopes.
 
 ### Key modules
 
-| Module | Purpose |
-|--------|---------|
-| `backend/app/app.py` | App setup, routes, MCP + Auth0 wiring |
-| `backend/app/auth0/__init__.py` | Auth0 JWT token validator |
-| `backend/app/auth0/client_store.py` | Dynamic client registration (RFC 7591) |
-| `backend/app/config.py` | pydantic-settings config (Auth0, Logfire) |
-| `backend/app/tools/` | MCP tools — CPE/CVE search via NVD |
-| `backend/app/agent.py` | pydantic-ai agent streaming logic |
-| `backend/app/agen_memory.py` | SQLite message persistence |
-| `frontend/src/api.ts` | API client (fetch history, stream messages) |
+| Module                                    | Purpose                                                        |
+| ----------------------------------------- | -------------------------------------------------------------- |
+| `backend/app/app.py`                      | HTTP app: MCP server + Auth0 wiring                            |
+| `backend/app/main.py`                     | Entry points: `run-app` (HTTP), `run-stdio`                    |
+| `backend/app/auth0/__init__.py`           | Auth0 JWT token validator                                      |
+| `backend/app/auth0/client_store.py`       | Dynamic client registration (RFC 7591), not mounted            |
+| `backend/app/config.py`                   | pydantic-settings config (Auth0)                               |
+| `backend/app/tools/`                      | MCP tools — CPE/CVE search via NVD                             |
+| `backend/app/prompts/`                    | MCP prompts                                                    |
+| `backend/tests/test_mcp_client_compat.py` | End-to-end tests with the real `mcp` SDK client (HTTP + stdio) |
 
 ## Development Guidelines
 
 ### Backend
 
 - Python 3.13, managed with `uv`
-- Run from `backend/`: `uv run run-app` (production) or `uv run run-app-local` (reload)
+- Run from `backend/`: `uv run run-app` (HTTP), `uv run run-app-local` (HTTP, reload),
+  `uv run run-stdio` (stdio)
 - Lint: `uv run ruff check .` — Type check: `uv run mypy .` — Test: `uv run pytest`
 - Follow existing patterns: pydantic models for I/O, `Config` for env vars
-
-### Frontend
-
-- React + TypeScript + Vite
-- Run from `frontend/`: `npm run dev` (proxies `/api/*` to backend on 8000)
-- Lint: `npm run lint` — Type check: `npx tsc --noEmit`
 
 ### Security rules
 
@@ -75,51 +71,3 @@ a chat agent, and a React frontend.
 - Docker installed on the system
 - No Dockerfile creation needed - only download the Docker images
 - Write access to the project directory for configuration files and results
-
-## Fluid Attacks Scanner
-
-### Purpose
-
-Scan the project for vulnerabilities using the Fluid Attacks MCP tools.
-
-### Step-by-Step Instructions
-
-#### 1. Use Fluid Attack MCP tools to configure and run the scanner
-
-#### 2. Add the output file to .gitignore
-
-#### 3. Remediate vulnerabilities
-
-- Review the output file
-- If there are vulnerabilities, remediate them
-
-## Best Practices for Agents
-
-### Configuration File Management
-
-- Always verify the correct paths for include/exclude before running
-- Adjust configuration based on project structure
-- Use `.gitignore` as a reference for exclude patterns
-- Store configuration files in the project root and add them to .gitignore
-- Add the output file (Fluid-Attacks-Results.csv) to .gitignore
-
-## When to Run What
-
-| Scenario                      | Scanner | Priority |
-| ----------------------------- | ------- | -------- |
-| New dependency added          | SCA     | High     |
-| Code changes in auth/security | SAST    | Critical |
-| Weekly security audit         | Both    | Medium   |
-| Pre-deployment check          | Both    | Critical |
-| Dependency version update     | SCA     | High     |
-| New feature development       | SAST    | Medium   |
-| Third-party library added     | SCA     | High     |
-| API endpoint changes          | SAST    | High     |
-
-## Integration with Development Workflow
-
-- On Code Changes: Run SAST if source files modified
-- On Dependency Changes: Run SCA if dependency files modified
-- On User Request: Run appropriate scanner(s)
-- Help with remediation: Always create/update security reports
-- Re-scan: After fixes to verify remediation
